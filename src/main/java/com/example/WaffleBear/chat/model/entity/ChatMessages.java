@@ -39,8 +39,10 @@ public class ChatMessages {
     private String fileType;     // 파일 타입 (image/png, application/pdf 등)
     private Long fileSize;       // 파일 크기 (bytes)
 
+    private Long fileId;         // 드라이브 FileInfo.idx 참조 (FILE_SHARE 타입 전용)
+
     @Enumerated(EnumType.STRING)
-    private MessageType messageType; // TEXT, IMAGE, FILE
+    private MessageType messageType; // TEXT, IMAGE, FILE, FILE_SHARE
 
     @CreatedDate // 👈 생성 시 시간 자동 기록
     @Column(updatable = false)
@@ -57,6 +59,7 @@ public class ChatMessages {
         this.fileName = null;
         this.fileType = null;
         this.fileSize = null;
+        this.fileId = null;
         this.messageType = MessageType.TEXT;
     }
 

@@ -19,9 +19,8 @@ public class ChatMessagesDto {
         private String fileName;
         private String fileType;
         private Long fileSize;
+        private Long fileId;
         private MessageType messageType;
-        // senderIdx는 보통 @AuthenticationPrincipal에서 가져오거나
-        // 웹소켓 연결 시 인증 정보를 통해 처리하지만, DTO에 포함할 수도 있습니다.
 
         public ChatMessages toEntity(ChatRooms room, User sender) {
             return ChatMessages.builder()
@@ -32,6 +31,7 @@ public class ChatMessagesDto {
                     .fileName(this.fileName)
                     .fileType(this.fileType)
                     .fileSize(this.fileSize)
+                    .fileId(this.fileId)
                     .messageType(this.messageType != null ? this.messageType : MessageType.TEXT)
                     .createdAt(LocalDateTime.now())
                     .build();
@@ -68,17 +68,18 @@ public class ChatMessagesDto {
         private LocalDateTime createdAt;
         private int messageUnreadCount;
         private String profileImageUrl;
-        private String fileUrl;      // 추가
-        private String fileName;     // 추가
-        private String fileType;     // 추가
-        private Long fileSize;       // 추가
-        private String messageType;  // 추가
+        private String fileUrl;
+        private String fileName;
+        private String fileType;
+        private Long fileSize;
+        private Long fileId;
+        private String messageType;
 
         public static ListRes from(ChatMessages entity, int messageUnreadCount, String profileImageUrl) {
             return ListRes.builder()
                     .idx(entity.getIdx())
                     .senderIdx(entity.getSender().getIdx())
-                    .senderNickname(entity.getSender().getName()) // User 엔티티에 nickname이 있다고 가정
+                    .senderNickname(entity.getSender().getName())
                     .contents(entity.getContents())
                     .createdAt(entity.getCreatedAt())
                     .messageUnreadCount(messageUnreadCount)
@@ -87,10 +88,11 @@ public class ChatMessagesDto {
                     .fileName(entity.getFileName())
                     .fileType(entity.getFileType())
                     .fileSize(entity.getFileSize())
+                    .fileId(entity.getFileId())
                     .messageType(entity.getMessageType() != null ? entity.getMessageType().name() : "TEXT")
                     .build();
         }
-        // 기존 from() 오버로딩 (readCount 없는 버전)
+
         public static ListRes from(ChatMessages entity) {
             return from(entity, 0, null);
         }

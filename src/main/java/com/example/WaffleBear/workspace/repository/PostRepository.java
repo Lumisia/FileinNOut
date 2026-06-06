@@ -1,7 +1,9 @@
 package com.example.WaffleBear.workspace.repository;
 
 import com.example.WaffleBear.workspace.model.post.Post;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -18,4 +20,8 @@ public interface PostRepository extends JpaRepository<Post, Long> {
     Optional<Post> findByPostIdAndUserId(@Param("postIdx") Long postIdx, @Param("userIdx") Long userIdx);
 
     Optional<Post> findByUUID(String uuid);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from Post p where p.idx = :postId")
+    Optional<Post> findByIdForVersionUpdate(@Param("postId") Long postId);
 }

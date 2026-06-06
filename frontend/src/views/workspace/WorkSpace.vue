@@ -8,6 +8,7 @@ import { useAuthStore } from '@/stores/useAuthStore'
 import SockJS from 'sockjs-client'
 import Stomp from 'stompjs'
 import { apiPath } from '@/utils/backendUrl'
+import { fetchPostVersions, fetchPostVersion } from '@/api/versionsApi'
 
 const route     = useRoute()
 const router    = useRouter()
@@ -233,6 +234,47 @@ const refreshWorkspaceAssets = async (targetWorkspaceId = workspaceId.value) => 
     return []
   } finally {
     workspaceAssetLoading.value = false
+  }
+}
+
+// ─── 버전 이력 ────────────────────────────────────────────────────────────────
+const versionPanelOpen  = ref(false)
+const versions          = ref([])
+const versionPreview    = ref(null)
+const versionsLoading   = ref(false)
+
+const formatVersionDate = (val) => {
+  if (!val) return ''
+  return new Intl.DateTimeFormat('ko-KR', {
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+  }).format(new Date(val))
+}
+
+const openVersionPanel = async () => {
+  if (!workspaceId.value) return
+  versionPanelOpen.value = true
+  versionsLoading.value  = true
+  try {
+    versions.value = await fetchPostVersions(workspaceId.value)
+  } catch {
+    versions.value = []
+  } finally {
+    versionsLoading.value = false
+  }
+}
+
+const closeVersionPanel = () => {
+  versionPanelOpen.value = false
+  versionPreview.value   = null
+}
+
+const previewVersion = async (versionNum) => {
+  if (!workspaceId.value) return
+  try {
+    versionPreview.value = await fetchPostVersion(workspaceId.value, versionNum)
+  } catch {
+    alert('버전을 불러오지 못했습니다.')
   }
 }
 
@@ -681,7 +723,65 @@ onBeforeUnmount(async () => {
           </div>
         </div>
 
-        <button :disabled="!isValid" @click="handleSave" class="save-btn">저장</button>
+        <div class="flex items-center gap-2">
+          <button :disabled="!isValid" @click="handleSave" class="save-btn">저장</button>
+          <button
+            v-if="workspaceId"
+            @click="openVersionPanel"
+            class="save-btn"
+            style="background: var(--bg-input, #f3f4f6); color: var(--text-muted, #6b7280);"
+            title="버전 이력"
+          >
+            <i class="fa-solid fa-clock-rotate-left"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- 버전 이력 패널 -->
+      <div
+        v-if="versionPanelOpen"
+        class="fixed inset-0 z-[900] flex items-start justify-end"
+        @click.self="closeVersionPanel"
+      >
+        <div class="w-80 h-full bg-white shadow-2xl border-l border-gray-200 flex flex-col overflow-hidden" @click.stop>
+          <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+            <span class="font-bold text-sm text-gray-700">버전 이력</span>
+            <button @click="closeVersionPanel" class="text-gray-400 hover:text-gray-600">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+
+          <div v-if="versionsLoading" class="flex-1 flex items-center justify-center text-xs text-gray-400">
+            불러오는 중...
+          </div>
+          <div v-else-if="!versions.length" class="flex-1 flex items-center justify-center text-xs text-gray-400">
+            저장된 버전이 없습니다.
+          </div>
+          <ul v-else class="flex-1 overflow-y-auto divide-y divide-gray-100">
+            <li
+              v-for="v in versions"
+              :key="v.id"
+              class="px-4 py-3 hover:bg-gray-50 cursor-pointer"
+              @click="previewVersion(v.versionNum)"
+            >
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-semibold text-gray-700">v{{ v.versionNum }}</span>
+                <span class="text-[10px] text-gray-400">{{ formatVersionDate(v.createdAt) }}</span>
+              </div>
+              <p class="text-[11px] text-gray-500 truncate mt-0.5">{{ v.titleSnapshot }}</p>
+            </li>
+          </ul>
+
+          <!-- 버전 미리보기 -->
+          <div v-if="versionPreview" class="border-t border-gray-100 px-4 py-3 bg-gray-50 max-h-64 overflow-y-auto">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-bold text-gray-600">v{{ versionPreview.versionNum }} 미리보기</span>
+              <button @click="versionPreview = null" class="text-[10px] text-gray-400 hover:text-gray-600">닫기</button>
+            </div>
+            <p class="text-[11px] font-semibold text-gray-700 mb-1">{{ versionPreview.titleSnapshot }}</p>
+            <pre class="text-[10px] text-gray-500 whitespace-pre-wrap break-all">{{ versionPreview.contentSnapshot }}</pre>
+          </div>
+        </div>
       </div>
 
       <div class="workspace-assets">

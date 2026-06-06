@@ -281,6 +281,11 @@ export async function fetchSharedTextPreview(fileId) {
   return extractObjectResult(response?.data);
 }
 
+export async function getFileDownloadLinkById(fileId) {
+  const response = await api.get(`/file/${fileId}/download-link`);
+  return extractDownloadLink(response?.data);
+}
+
 export async function fetchFileThumbnailBlob(fileId, version = "") {
   const response = await api.get(`/file/${fileId}/thumbnail`, {
     params: version ? { v: version } : undefined,

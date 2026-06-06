@@ -73,6 +73,7 @@ public class UploadDto {
     @AllArgsConstructor
     @Builder
     public static class CompleteRes {
+        private Long idx;
         private String fileOriginName;
         private String fileSaveName;
         private String fileFormat;
