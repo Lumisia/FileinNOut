@@ -13,6 +13,7 @@ import com.example.WaffleBear.user.repository.UserRepository;
 //import com.example.WaffleBear.workspace.asset.WorkspaceAssetService;
 import com.example.WaffleBear.workspace.asset.WorkspaceAssetService;
 import com.example.WaffleBear.workspace.model.post.Post;
+import com.example.WaffleBear.workspace.model.post.PostVersionDto;
 import com.example.WaffleBear.workspace.model.post.PostDto;
 import com.example.WaffleBear.workspace.model.post.isShare;
 import com.example.WaffleBear.workspace.model.relation.AccessRole;
@@ -47,6 +48,7 @@ public class PostService {
     private final UserPostRepository upr;
     private final NotificationService ns;
     private final WorkspaceAssetService workspaceAssetService;
+    private final PostVersionService postVersionService;
 
     // ─────────────────────────────────────────────────────────────────────────
     // 저장 / 수정
@@ -61,9 +63,12 @@ public class PostService {
                     .orElseThrow(() -> new BaseException(WORKSPACE_NOT_FOUND));
             result.update(dto.title(), dto.contents());
             pr.save(result);
-            List<Long> user_list = upr.findUserIdsByPostIdx(result.getIdx());
 
-            // 3. SSE를 통해 참여자들에게 실시간 알림 전송
+            if (dto.idempotencyKey() != null && !dto.idempotencyKey().isBlank()) {
+                postVersionService.createSnapshot(result, user.getIdx(), dto.idempotencyKey());
+            }
+
+            List<Long> user_list = upr.findUserIdsByPostIdx(result.getIdx());
             sseService.sendTitleUpdate(result.getIdx(), result.getTitle(), user_list);
         } else {
             result = new Post();

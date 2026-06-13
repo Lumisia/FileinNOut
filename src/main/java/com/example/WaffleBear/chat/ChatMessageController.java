@@ -79,6 +79,26 @@ public class ChatMessageController {
         return ResponseEntity.ok(BaseResponse.success(Map.of("fileUrl", fileUrl)));
     }
 
+    @PostMapping("/{roomIdx}/file-share")
+    public ResponseEntity<?> sendFileShare(
+            @PathVariable Long roomIdx,
+            @RequestBody ChatMessagesDto.Send req,
+            @AuthenticationPrincipal AuthUserDetails user) {
+
+        ChatMessagesDto.ListRes savedMsg = chatMessageService.saveMessage(roomIdx, req, user.getIdx());
+        stompPublisher.send("/sub/chat/room/" + roomIdx, savedMsg);
+        return ResponseEntity.ok(BaseResponse.success(savedMsg));
+    }
+
+    @GetMapping("/{roomIdx}/file-share/{messageId}/download-link")
+    public ResponseEntity<?> getSharedFileDownloadUrl(
+            @PathVariable Long roomIdx,
+            @PathVariable Long messageId,
+            @AuthenticationPrincipal AuthUserDetails user) {
+        String url = chatMessageService.getSharedFileDownloadUrl(roomIdx, messageId, user.getIdx());
+        return ResponseEntity.ok(BaseResponse.success(url));
+    }
+
     @DeleteMapping("/{roomIdx}/{messageIdx}")
     public ResponseEntity<?> deleteMessage(
             @PathVariable Long roomIdx,

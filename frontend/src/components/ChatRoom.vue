@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/useAuthStore'
 import SockJS from 'sockjs-client'
 import Stomp from 'stompjs'
 import { apiPath } from '@/utils/backendUrl'
+import { initUploadFiles, completeUpload, abortUpload } from '@/api/filesApi'
 
 const props = defineProps({ room: Object, currentUser: Object })
 const emit = defineEmits(['back', 'open-invite', 'room-preview-update'])
@@ -61,6 +62,7 @@ const toChatMessage = (payload = {}, options = {}) => {
     fileName: deleted ? null : (payload.fileName ?? null),
     fileType: deleted ? null : (payload.fileType ?? null),
     fileSize: deleted ? null : (payload.fileSize ?? null),
+    fileId: deleted ? null : (payload.fileId ?? null),
     messageType: deleted ? 'TEXT' : (payload.messageType || 'TEXT'),
   }
 }
@@ -72,6 +74,9 @@ const getPreviewText = (message = {}) => {
   const normalizedMessageType = String(message.messageType ?? '').toUpperCase()
   if (normalizedMessageType === 'IMAGE') return '사진'
   if (normalizedMessageType === 'FILE') return '문서'
+  if (normalizedMessageType === 'FILE_SHARE') {
+    return message.fileName ? `📎 ${message.fileName}` : '파일 공유'
+  }
 
   const normalizedFileType = String(message.fileType ?? '').toLowerCase()
   if (normalizedFileType.startsWith('image/')) return '사진'
@@ -82,6 +87,118 @@ const getPreviewText = (message = {}) => {
   if (fileHint) return '문서'
 
   return ''
+}
+
+const downloadSharedFile = async (message) => {
+  if (!message?.id || !message?.fileId) return
+  try {
+    const res = await api.get(`/chat/${props.room.id}/file-share/${message.id}/download-link`)
+    const downloadUrl = res?.data?.result
+    if (!downloadUrl) throw new Error('다운로드 링크를 받지 못했습니다.')
+    const anchor = document.createElement('a')
+    anchor.href = downloadUrl
+    anchor.download = message.fileName || 'file'
+    anchor.rel = 'noopener noreferrer'
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+  } catch (e) {
+    alert('파일 다운로드에 실패했습니다. 파일이 삭제되었거나 권한이 없을 수 있습니다.')
+  }
+}
+
+const driveFileInput = ref(null)
+
+const handleDriveFileShare = async (e) => {
+  const file = e.target.files[0]
+  if (!file || !stompClient) return
+
+  try {
+    const initRes = await initUploadFiles([file])
+    const uploadItems = Array.isArray(initRes?.data) ? initRes.data : []
+    if (!uploadItems.length) throw new Error('업로드 초기화 실패')
+
+    const firstItem = uploadItems[0]
+    const partitioned = firstItem?.partitioned === true
+    const CHUNK_BYTES = 80 * 1024 * 1024
+    const chunkObjectKeys = partitioned ? uploadItems.map(item => item.objectKey) : []
+
+    let completeRes
+    try {
+      if (partitioned) {
+        for (const item of uploadItems) {
+          if (!item.presignedUploadUrl) throw new Error('presignedUploadUrl 누락')
+          const start = (item.partitionIndex - 1) * CHUNK_BYTES
+          const end = item.partitionIndex === item.partitionCount ? file.size : Math.min(start + CHUNK_BYTES, file.size)
+          const res = await fetch(item.presignedUploadUrl, {
+            method: 'PUT',
+            body: file.slice(start, end),
+            headers: { 'Content-Type': file.type || 'application/octet-stream' },
+          })
+          if (!res.ok) throw new Error(`파트 업로드 실패: ${res.status}`)
+        }
+      } else {
+        if (!firstItem.presignedUploadUrl) throw new Error('presignedUploadUrl 누락')
+        const res = await fetch(firstItem.presignedUploadUrl, {
+          method: 'PUT',
+          body: file,
+          headers: { 'Content-Type': file.type || 'application/octet-stream' },
+        })
+        if (!res.ok) throw new Error(`업로드 실패: ${res.status}`)
+      }
+
+      completeRes = await completeUpload({
+        fileOriginName: firstItem.fileOriginName,
+        fileFormat: firstItem.fileFormat,
+        fileSize: firstItem.fileSize,
+        finalObjectKey: firstItem.finalObjectKey,
+        chunkObjectKeys,
+        parentId: null,
+        relativePath: file.name,
+        lastModified: Number(file.lastModified ?? 0) || 0,
+      })
+    } catch (uploadErr) {
+      await abortUpload({ finalObjectKey: firstItem.finalObjectKey, chunkObjectKeys }).catch(() => {})
+      throw uploadErr
+    }
+
+    const fileId = completeRes?.data?.idx
+    if (!fileId) throw new Error('fileId를 받지 못했습니다.')
+
+    const payload = {
+      contents: '',
+      fileId,
+      fileName: file.name,
+      fileSize: file.size,
+      fileType: file.type,
+      messageType: 'FILE_SHARE',
+    }
+
+    const tempMsg = {
+      id: 'temp-' + Date.now() + Math.random(),
+      sender: myName.value,
+      time: new Date().toISOString(),
+      isMe: true,
+      isPending: true,
+      messageUnreadCount: 0,
+      profileImageUrl: myProfileImageUrl.value,
+      fileId,
+      fileName: file.name,
+      fileSize: file.size,
+      fileType: file.type,
+      messageType: 'FILE_SHARE',
+    }
+    chatMessages.value.push(tempMsg)
+    emitRoomPreviewUpdate(tempMsg)
+    sortMessages()
+    nextTick(() => scrollToBottom())
+
+    await api.post(`/chat/${props.room.id}/file-share`, payload)
+  } catch (err) {
+    alert('드라이브 파일 공유에 실패했습니다.')
+  }
+
+  e.target.value = ''
 }
 
 const emitRoomPreviewUpdate = (message = {}) => {
@@ -106,6 +223,7 @@ const applyDeletedMessage = (messageId, deletedText = DELETED_MESSAGE_TEXT) => {
   target.fileName = null
   target.fileType = null
   target.fileSize = null
+  target.fileId = null
   target.messageType = 'TEXT'
   emitRoomPreviewUpdate(target)
 }
@@ -597,7 +715,7 @@ watch(() => props.room.id, async (newRoomId, oldRoomId) => {
                   class="max-w-[200px] max-h-[200px] rounded-xl object-cover cursor-pointer"
                   @click="openImagePreview(msg)"
                 />
-                <!-- 파일 -->
+                <!-- 파일 (채팅 직접 업로드) -->
                 <a
                   v-else-if="msg.messageType === 'FILE'"
                   :href="msg.fileUrl"
@@ -611,6 +729,18 @@ watch(() => props.room.id, async (newRoomId, oldRoomId) => {
                   </div>
                   <i class="fa-solid fa-download ml-1"></i>
                 </a>
+                <!-- 드라이브 파일 공유 -->
+                <button
+                  v-else-if="msg.messageType === 'FILE_SHARE'"
+                  :class="['flex items-center gap-2 text-left', msg.isMe ? 'text-white' : 'text-[var(--text-main)]']"
+                  @click="downloadSharedFile(msg)"
+                >
+                  <i class="fa-solid fa-cloud-arrow-down text-lg"></i>
+                  <div class="flex flex-col">
+                    <span class="font-bold truncate max-w-[150px]">{{ msg.fileName }}</span>
+                    <span class="text-[9px] opacity-70">{{ formatFileSize(msg.fileSize) }} · 드라이브</span>
+                  </div>
+                </button>
                 <!-- 텍스트 -->
                 <span v-else>{{ msg.text }}</span>
               </div>
@@ -695,18 +825,34 @@ watch(() => props.room.id, async (newRoomId, oldRoomId) => {
           class="hidden"
           @change="handleFileSelect"
         />
-        <button
-          @click="fileInput.click()"
-          class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[#4169E1] transition z-10"
-        >
-          <i class="fa-solid fa-paperclip"></i>
-        </button>
+        <input
+          ref="driveFileInput"
+          type="file"
+          class="hidden"
+          @change="handleDriveFileShare"
+        />
+        <div class="absolute left-2 top-1/2 -translate-y-1/2 flex gap-1 z-10">
+          <button
+            @click="fileInput.click()"
+            class="text-gray-400 hover:text-[#4169E1] transition"
+            title="파일 직접 업로드"
+          >
+            <i class="fa-solid fa-paperclip"></i>
+          </button>
+          <button
+            @click="driveFileInput.click()"
+            class="text-gray-400 hover:text-[#4169E1] transition"
+            title="드라이브 파일 공유"
+          >
+            <i class="fa-solid fa-cloud-arrow-up text-[11px]"></i>
+          </button>
+        </div>
         <input
           v-model="newMessage"
           @keydown.enter.prevent="sendMessage"
           type="text"
           placeholder="메시지 입력..."
-          class="w-full border border-gray-200 rounded-lg pl-9 pr-9 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+          class="w-full border border-gray-200 rounded-lg pl-16 pr-9 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
         />
         <button
           @click="sendMessage"

@@ -9,6 +9,10 @@ import com.example.WaffleBear.config.MinioProperties;
 import com.example.WaffleBear.config.sse.SseService;
 import com.example.WaffleBear.config.stomp.ClusteredStompPublisher;
 import com.example.WaffleBear.feater.FeaterService;
+import com.example.WaffleBear.file.FileUpDownloadRepository;
+import com.example.WaffleBear.file.model.FileInfo;
+import com.example.WaffleBear.file.model.FileNodeType;
+import com.example.WaffleBear.file.share.ShareRepository;
 import com.example.WaffleBear.notification.NotificationService;
 import com.example.WaffleBear.user.model.User;
 import com.example.WaffleBear.user.repository.UserRepository;
@@ -45,6 +49,8 @@ public class ChatMessageService {
     private final FeaterService featerService;
     private final MinioClient minioClient;
     private final MinioProperties minioProperties;
+    private final FileUpDownloadRepository fileRepository;
+    private final ShareRepository shareRepository;
 
     private static final long MAX_IMAGE_SIZE = 5L * 1024 * 1024;
     private static final long MAX_FILE_SIZE = 30L * 1024 * 1024;
@@ -111,7 +117,44 @@ public class ChatMessageService {
         User user = userRepository.findById(senderIdx)
                 .orElseThrow(() -> new RuntimeException("유저를 찾을 수 없습니다."));
 
-        ChatMessages message = chatMessageRepository.save(req.toEntity(room, user));
+        ChatMessages message;
+        if (req.getMessageType() == MessageType.FILE_SHARE) {
+            participantsRepository.findByChatRoomsIdxAndUsersIdx(roomIdx, senderIdx)
+                    .orElseThrow(() -> new RuntimeException("해당 채팅방에 접근 권한이 없습니다."));
+            if (req.getFileId() == null) {
+                throw new IllegalArgumentException("FILE_SHARE 메시지에는 fileId가 필요합니다.");
+            }
+            FileInfo fileInfo = fileRepository.findByIdxAndUser_Idx(req.getFileId(), senderIdx)
+                    .orElseGet(() -> {
+                        FileInfo shared = fileRepository.findById(req.getFileId())
+                                .orElseThrow(() -> new IllegalArgumentException("파일을 찾을 수 없습니다."));
+                        shareRepository.findByFile_IdxAndRecipient_Idx(req.getFileId(), senderIdx)
+                                .orElseThrow(() -> new IllegalArgumentException("파일에 접근 권한이 없습니다."));
+                        return shared;
+                    });
+            if (fileInfo.isTrashed()) {
+                throw new IllegalArgumentException("휴지통에 있는 파일은 공유할 수 없습니다.");
+            }
+            if (fileInfo.isLockedFile()) {
+                throw new IllegalArgumentException("잠긴 파일은 공유할 수 없습니다.");
+            }
+            if (fileInfo.getNodeType() != null && fileInfo.getNodeType() != FileNodeType.FILE) {
+                throw new IllegalArgumentException("파일만 공유할 수 있습니다.");
+            }
+            message = chatMessageRepository.save(ChatMessages.builder()
+                    .chatRooms(room)
+                    .sender(user)
+                    .contents("")
+                    .fileId(fileInfo.getIdx())
+                    .fileName(fileInfo.getFileOriginName())
+                    .fileSize(fileInfo.getFileSize())
+                    .fileType(fileInfo.getFileFormat())
+                    .messageType(MessageType.FILE_SHARE)
+                    .createdAt(java.time.LocalDateTime.now())
+                    .build());
+        } else {
+            message = chatMessageRepository.save(req.toEntity(room, user));
+        }
         String previewMessage = getPreviewMessage(message);
         room.updateLastMessage(previewMessage, message.getCreatedAt());
 
@@ -273,6 +316,10 @@ public class ChatMessageService {
         if (message.isDeleted()) return "삭제된 메시지입니다.";
         if (message.getMessageType() == MessageType.IMAGE) return "사진";
         if (message.getMessageType() == MessageType.FILE) return "문서";
+        if (message.getMessageType() == MessageType.FILE_SHARE) {
+            String name = message.getFileName();
+            return (name != null && !name.isBlank()) ? "📎 " + name : "파일 공유";
+        }
 
         String contents = message.getContents();
         return (contents == null || contents.isBlank()) ? "메시지가 없습니다." : contents;
@@ -283,6 +330,46 @@ public class ChatMessageService {
                         last -> room.updateLastMessage(getPreviewMessage(last), last.getCreatedAt()),
                         () -> room.updateLastMessage("", null)
                 );
+    }
+
+    @Transactional(readOnly = true)
+    public String getSharedFileDownloadUrl(Long roomIdx, Long messageId, Long userIdx) {
+        ChatParticipants participant = participantsRepository.findByChatRoomsIdxAndUsersIdx(roomIdx, userIdx)
+                .orElseThrow(() -> new RuntimeException("해당 채팅방에 접근 권한이 없습니다."));
+        ChatMessages message = chatMessageRepository.findByIdxAndChatRoomsIdx(messageId, roomIdx)
+                .orElseThrow(() -> new RuntimeException("메시지를 찾을 수 없습니다."));
+        if (message.getMessageType() != MessageType.FILE_SHARE || message.getFileId() == null) {
+            throw new RuntimeException("파일 공유 메시지가 아닙니다.");
+        }
+        LocalDateTime joinedAt = participant.getJoinedAt() != null
+                ? participant.getJoinedAt()
+                : LocalDateTime.of(2000, 1, 1, 0, 0);
+        if (message.getCreatedAt() != null && message.getCreatedAt().isBefore(joinedAt)) {
+            throw new RuntimeException("접근 권한이 없는 메시지입니다.");
+        }
+        FileInfo fileInfo = fileRepository.findById(message.getFileId())
+                .orElseThrow(() -> new RuntimeException("파일을 찾을 수 없습니다."));
+        if (fileInfo.getFileSavePath() == null || fileInfo.isTrashed()) {
+            throw new RuntimeException("파일을 사용할 수 없습니다.");
+        }
+        if (fileInfo.isLockedFile()) {
+            throw new RuntimeException("잠긴 파일은 다운로드할 수 없습니다.");
+        }
+        if (fileInfo.getNodeType() != null && fileInfo.getNodeType() != FileNodeType.FILE) {
+            throw new RuntimeException("파일이 아닙니다.");
+        }
+        try {
+            return minioClient.getPresignedObjectUrl(
+                    GetPresignedObjectUrlArgs.builder()
+                            .method(Method.GET)
+                            .bucket(minioProperties.getBucket_cloud())
+                            .object(fileInfo.getFileSavePath())
+                            .expiry(Math.min(minioProperties.getPresignedUrlExpirySeconds(), 300))
+                            .build()
+            );
+        } catch (Exception e) {
+            throw new RuntimeException("다운로드 URL 생성 실패: " + e.getMessage());
+        }
     }
 
 }

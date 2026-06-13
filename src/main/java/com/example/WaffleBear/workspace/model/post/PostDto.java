@@ -10,7 +10,8 @@ public class PostDto {
     public record ReqPost(
             Long idx,
             String title,
-            String contents
+            String contents,
+            String idempotencyKey
     ) {
         public Post toEntity() {
             return Post.builder()

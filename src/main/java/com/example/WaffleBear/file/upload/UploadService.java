@@ -135,6 +135,7 @@ public class UploadService {
             releaseUploadQuota(finalObjectKey);
             FileInfo entity = existing.get();
             return UploadDto.CompleteRes.builder()
+                    .idx(entity.getIdx())
                     .fileOriginName(entity.getFileOriginName())
                     .fileSaveName(entity.getFileSaveName())
                     .fileFormat(entity.getFileFormat())
@@ -167,7 +168,12 @@ public class UploadService {
                 fileOriginName
         );
 
+        Long savedIdx = fileUpDownloadRepository.findByUser_IdxAndFileSavePath(userIdx, finalObjectKey)
+                .map(FileInfo::getIdx)
+                .orElse(null);
+
         return UploadDto.CompleteRes.builder()
+                .idx(savedIdx)
                 .fileOriginName(fileOriginName)
                 .fileSaveName(extractFileSaveName(finalObjectKey))
                 .fileFormat(fileFormat)
