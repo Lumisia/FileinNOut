@@ -41,4 +41,4 @@ out/
 keystore.p12
 deploy-backend.bat
 frontend/k8s/backend-configmap.yaml
-/helm/values.private.yaml
+/cicd/helm/values.private.yaml

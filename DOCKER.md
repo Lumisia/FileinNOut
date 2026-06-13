@@ -6,9 +6,9 @@
 
 | 서비스 | 이미지/빌드 | 포트(host) | 설명 |
 |--------|-------------|-----------|------|
-| `frontend` | `frontend.dockerfile` (Nginx) | 80, 443 | 정적 SPA + `/api`·`/api/ws-stomp`·`/api/sse` 리버스 프록시 |
-| `backend-app` | `backend.dockerfile` (Spring Boot) | 8080 | REST API + STOMP 브로커. 부팅 시 MinIO 버킷 자동 생성 |
-| `websocket-server` | `websocket.dockerfile` (Node) | 1234 | Yjs 협업 편집 + realtime 프록시 |
+| `frontend` | `cicd/frontend.dockerfile` (Nginx) | 80, 443 | 정적 SPA + `/api`·`/api/ws-stomp`·`/api/sse` 리버스 프록시 |
+| `backend-app` | `cicd/backend.dockerfile` (Spring Boot) | 8080 | REST API + STOMP 브로커. 부팅 시 MinIO 버킷 자동 생성 |
+| `websocket-server` | `cicd/websocket.dockerfile` (Node) | 1234 | Yjs 협업 편집 + realtime 프록시 |
 | `db` | `mariadb:latest` | 3307→3306 | `web` 스키마. healthcheck 포함 |
 | `redis` | `redis:latest` | 6379 | STOMP/SSE fan-out + 캐시 |
 | `minio` | `minio/minio` | 9000(API), 9001(콘솔) | 오브젝트 스토리지 |
