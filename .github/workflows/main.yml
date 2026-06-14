@@ -59,13 +59,13 @@ jobs:
           printf '%s' "$KUBE_CONFIG" > "$HOME/.kube/config"
           chmod 600 "$HOME/.kube/config"
 
-          printf '%s' "$HELM_VALUES_PRIVATE" > helm/values.private.ci.yaml
+          printf '%s' "$HELM_VALUES_PRIVATE" > cicd/helm/values.private.ci.yaml
 
-          helm upgrade --install "$RELEASE_NAME" ./helm \
+          helm upgrade --install "$RELEASE_NAME" ./cicd/helm \
             --namespace "$NAMESPACE" \
             --create-namespace \
-            -f helm/values.yaml \
-            -f helm/values.private.ci.yaml \
+            -f cicd/helm/values.yaml \
+            -f cicd/helm/values.private.ci.yaml \
             --set-string backend.image.tag="${COMPOSE_IMAGE_TAG}" \
             --set-string frontend.image.tag="${COMPOSE_IMAGE_TAG}" \
             --set-string websocket.image.tag="${COMPOSE_IMAGE_TAG}"

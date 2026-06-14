@@ -215,7 +215,7 @@ public class StorageAnalyticsService {
             String objectKey,
             String referenceLabel
     ) {
-        if (direction == null || source == null || status == null || bytes <= 0L) {
+        if (direction == null || source == null || status == null || bytes < 0L) {
             return;
         }
 

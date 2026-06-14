@@ -51,7 +51,7 @@ services:
   backend-app:
     build:
       context: .
-      dockerfile: backend.dockerfile
+      dockerfile: cicd/backend.dockerfile
     image: lumisia/backend:${COMPOSE_IMAGE_TAG:-latest}
     ports:
       - "8080:8080"
@@ -124,7 +124,7 @@ services:
   websocket-server:
     build:
       context: .
-      dockerfile: websocket.dockerfile
+      dockerfile: cicd/websocket.dockerfile
     image: lumisia/websocket-server:${COMPOSE_IMAGE_TAG:-latest}
     environment:
       - PORT=1234
@@ -153,7 +153,7 @@ services:
   frontend:
     build:
       context: .
-      dockerfile: frontend.dockerfile
+      dockerfile: cicd/frontend.dockerfile
     image: lumisia/frontend:${COMPOSE_IMAGE_TAG:-latest}
     container_name: waffle-frontend
     ports:

@@ -5,11 +5,11 @@ import com.example.WaffleBear.administrator.storage.DataTransferSource;
 import com.example.WaffleBear.administrator.storage.DataTransferStatus;
 import com.example.WaffleBear.common.exception.BaseException;
 import com.example.WaffleBear.common.model.BaseResponseStatus;
+import com.example.WaffleBear.file.dto.FileCommonDto.FileDownloadDescriptor;
 import io.minio.GetObjectArgs;
 import io.minio.MinioClient;
-import io.minio.StatObjectArgs;
-import io.minio.StatObjectResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class TrackedDownloadService {
@@ -30,20 +31,18 @@ public class TrackedDownloadService {
 
     public ResponseEntity<StreamingResponseBody> streamObject(
             Long userIdx,
-            String bucketName,
-            String objectKey,
-            String fileName,
-            String fallbackContentType,
-            DataTransferSource source,
-            String referenceLabel
+            FileDownloadDescriptor descriptor
     ) {
-        if (bucketName == null || bucketName.isBlank() || objectKey == null || objectKey.isBlank()) {
+        if (descriptor == null
+                || descriptor.bucketName() == null || descriptor.bucketName().isBlank()
+                || descriptor.objectKey() == null || descriptor.objectKey().isBlank()) {
             throw BaseException.from(BaseResponseStatus.REQUEST_ERROR);
         }
 
-        StatObjectResponse objectStat = statObject(bucketName, objectKey);
-        String contentType = resolveContentType(objectStat.contentType(), fallbackContentType);
-        String downloadFileName = resolveFileName(fileName, objectKey);
+        String bucketName       = descriptor.bucketName();
+        String objectKey        = descriptor.objectKey();
+        String contentType      = resolveContentType(descriptor.contentType());
+        String downloadFileName = resolveFileName(descriptor.fileName(), objectKey);
 
         StreamingResponseBody body = outputStream -> {
             long transferredBytes = 0L;
@@ -69,61 +68,49 @@ public class TrackedDownloadService {
                 transferStatus = transferredBytes > 0L ? DataTransferStatus.PARTIAL : DataTransferStatus.FAILED;
                 throw new IOException(exception);
             } finally {
-                if (transferredBytes > 0L) {
-                    storageAnalyticsService.recordEgress(
-                            userIdx,
-                            source,
-                            transferStatus,
-                            transferredBytes,
-                            objectKey,
-                            referenceLabel
-                    );
-                }
+                safeRecordEgress(userIdx, descriptor.source(), transferStatus, transferredBytes, objectKey, descriptor.referenceLabel());
             }
         };
 
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.inline()
+        ResponseEntity.BodyBuilder builder = ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
                         .filename(downloadFileName, StandardCharsets.UTF_8)
                         .build()
                         .toString())
-                .contentLength(Math.max(0L, objectStat.size()))
-                .contentType(MediaType.parseMediaType(contentType))
-                .body(body);
+                .contentType(MediaType.parseMediaType(contentType));
+
+        if (descriptor.contentLength() != null) {
+            builder = builder.contentLength(Math.max(0L, descriptor.contentLength()));
+        }
+
+        return builder.body(body);
     }
 
-    public long statObjectSize(String bucketName, String objectKey) {
-        return Math.max(0L, statObject(bucketName, objectKey).size());
-    }
-
-    private StatObjectResponse statObject(String bucketName, String objectKey) {
+    private void safeRecordEgress(Long userIdx, DataTransferSource source, DataTransferStatus status,
+                                   long bytes, String objectKey, String referenceLabel) {
         try {
-            return minioClient.statObject(
-                    StatObjectArgs.builder()
-                            .bucket(bucketName)
-                            .object(objectKey)
-                            .build()
-            );
-        } catch (Exception exception) {
-            throw BaseException.from(BaseResponseStatus.REQUEST_ERROR);
+            storageAnalyticsService.recordEgress(userIdx, source, status, bytes, objectKey, referenceLabel);
+        } catch (RuntimeException e) {
+            log.warn("egress recording failed: objectKey={} status={} bytes={}", objectKey, status, bytes, e);
         }
     }
 
-    private String resolveContentType(String primaryContentType, String fallbackContentType) {
-        if (primaryContentType != null && !primaryContentType.isBlank()) {
-            return primaryContentType;
+    private String resolveContentType(String contentType) {
+        if (contentType == null || contentType.isBlank()) {
+            return MediaType.APPLICATION_OCTET_STREAM_VALUE;
         }
-        if (fallbackContentType != null && !fallbackContentType.isBlank()) {
-            return fallbackContentType;
+        try {
+            MediaType.parseMediaType(contentType);
+            return contentType;
+        } catch (Exception e) {
+            return MediaType.APPLICATION_OCTET_STREAM_VALUE;
         }
-        return MediaType.APPLICATION_OCTET_STREAM_VALUE;
     }
 
     private String resolveFileName(String fileName, String objectKey) {
         if (fileName != null && !fileName.isBlank()) {
             return fileName.trim();
         }
-
         int separatorIndex = objectKey.lastIndexOf('/');
         return separatorIndex >= 0 && separatorIndex < objectKey.length() - 1
                 ? objectKey.substring(separatorIndex + 1)
