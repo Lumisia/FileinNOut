@@ -1,5 +1,6 @@
 package com.example.WaffleBear.workspace.asset;
 
+import com.example.WaffleBear.administrator.storage.DataTransferSource;
 import com.example.WaffleBear.common.exception.BaseException;
 import com.example.WaffleBear.common.model.BaseResponseStatus;
 import com.example.WaffleBear.config.MinioProperties;
@@ -349,17 +350,25 @@ public class WorkspaceAssetService {
     }
 
     @Transactional(readOnly = true)
-    public FileCommonDto.FileDownloadPayload downloadWorkspaceAsset(Long userIdx, Long workspaceIdx, Long assetIdx) {
+    public FileCommonDto.FileDownloadDescriptor downloadWorkspaceAsset(Long userIdx, Long workspaceIdx, Long assetIdx) {
         WorkspacePermission permission = requireWorkspaceAccess(userIdx, workspaceIdx, false);
         WorkspaceAsset asset = workspaceAssetRepository
                 .findByIdxAndWorkspace_Idx(assetIdx, permission.workspace().getIdx())
                 .orElseThrow(() -> BaseException.from(BaseResponseStatus.REQUEST_ERROR));
 
-        return new FileCommonDto.FileDownloadPayload(
-                readObjectBytes(minioProperties.getBucket_cloud(), asset.getObjectKey()),
+        String objectKey = asset.getObjectKey();
+        if (objectKey == null || objectKey.isBlank()) {
+            throw BaseException.from(BaseResponseStatus.REQUEST_ERROR);
+        }
+
+        return new FileCommonDto.FileDownloadDescriptor(
+                minioProperties.getBucket_cloud(),
+                objectKey,
                 resolveContentType(asset.getContentType()),
                 sanitizeDownloadFileName(asset.getOriginalName(), asset.getStoredFileName()),
-                asset.getFileSize()
+                asset.getFileSize(),
+                DataTransferSource.WORKSPACE_ASSET,
+                "workspace:" + workspaceIdx + ":asset:" + assetIdx
         );
     }
 
@@ -722,19 +731,6 @@ public class WorkspaceAssetService {
             );
         } catch (Exception exception) {
             return null;
-        }
-    }
-
-    private byte[] readObjectBytes(String bucketName, String objectKey) {
-        try (var objectStream = minioClient.getObject(
-                GetObjectArgs.builder()
-                        .bucket(bucketName)
-                        .object(objectKey)
-                        .build()
-        )) {
-            return objectStream.readAllBytes();
-        } catch (Exception exception) {
-            throw BaseException.from(BaseResponseStatus.REQUEST_ERROR);
         }
     }
 

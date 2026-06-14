@@ -97,7 +97,7 @@ public class FileUpDownloadS3Service implements FileUpDownloadService {
     }
 
     @Override
-    public FileCommonDto.FileDownloadPayload downloadFile(Long userIdx, Long fileIdx) {
+    public FileCommonDto.FileDownloadDescriptor downloadFile(Long userIdx, Long fileIdx) {
         return resolveDelegate().downloadFile(userIdx, fileIdx);
     }
 

@@ -1,5 +1,6 @@
 package com.example.WaffleBear.file.service;
 
+import com.example.WaffleBear.administrator.storage.DataTransferSource;
 import com.example.WaffleBear.common.exception.BaseException;
 import com.example.WaffleBear.common.model.BaseResponseStatus;
 import com.example.WaffleBear.config.MinioProperties;
@@ -547,7 +548,7 @@ public class FileUpDownloadMinioService implements FileUpDownloadService {
     }
 
     @Override
-    public FileCommonDto.FileDownloadPayload downloadFile(Long userIdx, Long fileIdx) {
+    public FileCommonDto.FileDownloadDescriptor downloadFile(Long userIdx, Long fileIdx) {
         FileInfo file = getOwnedFile(userIdx, fileIdx);
         if (resolveNodeType(file) != FileNodeType.FILE || file.isLockedFile()) {
             throw BaseException.from(BaseResponseStatus.REQUEST_ERROR);
@@ -558,11 +559,14 @@ public class FileUpDownloadMinioService implements FileUpDownloadService {
             throw BaseException.from(BaseResponseStatus.REQUEST_ERROR);
         }
 
-        return new FileCommonDto.FileDownloadPayload(
-                readObjectBytes(minioProperties.getBucket_cloud(), objectKey),
+        return new FileCommonDto.FileDownloadDescriptor(
+                minioProperties.getBucket_cloud(),
+                objectKey,
                 resolveDownloadContentType(file.getFileOriginName()),
                 sanitizeDownloadFileName(file.getFileOriginName(), file.getFileSaveName()),
-                file.getFileSize()
+                file.getFileSize(),
+                DataTransferSource.DRIVE_FILE,
+                "drive:" + fileIdx
         );
     }
 
@@ -1353,19 +1357,6 @@ public class FileUpDownloadMinioService implements FileUpDownloadService {
         }
 
         return "text/plain";
-    }
-
-    private byte[] readObjectBytes(String bucketName, String objectKey) {
-        try (var objectStream = minioClient.getObject(
-                GetObjectArgs.builder()
-                        .bucket(bucketName)
-                        .object(objectKey)
-                        .build()
-        )) {
-            return objectStream.readAllBytes();
-        } catch (Exception exception) {
-            throw BaseException.from(BaseResponseStatus.REQUEST_ERROR);
-        }
     }
 
     private String resolveDownloadContentType(String fileName) {

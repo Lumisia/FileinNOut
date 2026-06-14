@@ -1,5 +1,6 @@
 package com.example.WaffleBear.file.dto;
 
+import com.example.WaffleBear.administrator.storage.DataTransferSource;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -73,13 +74,15 @@ public class FileCommonDto {
         private int currentSize;
     }
 
-    public record FileDownloadPayload(
-            byte[] bytes,
+    public record FileDownloadDescriptor(
+            String bucketName,
+            String objectKey,
             String contentType,
             String fileName,
-            Long contentLength
-    ) {
-    }
+            Long contentLength,
+            DataTransferSource source,
+            String referenceLabel
+    ) {}
 
     public record FileDownloadUrlRes(
             String downloadUrl

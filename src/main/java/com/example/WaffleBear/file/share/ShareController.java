@@ -4,6 +4,7 @@ import com.example.WaffleBear.file.dto.FileCommonDto;
 import com.example.WaffleBear.file.info.dto.FileInfoDto;
 import com.example.WaffleBear.file.service.FileThumbnailQueryService;
 import com.example.WaffleBear.file.service.FileThumbnailService;
+import com.example.WaffleBear.file.service.TrackedDownloadService;
 import com.example.WaffleBear.file.share.model.ShareDto;
 import com.example.WaffleBear.user.model.AuthUserDetails;
 import io.swagger.v3.oas.annotations.Operation;
@@ -11,7 +12,6 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.CacheControl;
-import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -23,8 +23,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
@@ -38,6 +38,7 @@ public class ShareController {
 
     private final ShareService shareService;
     private final FileThumbnailQueryService fileThumbnailQueryService;
+    private final TrackedDownloadService trackedDownloadService;
 
     @GetMapping("/shared/list")
     @Operation(summary = "List received shared files", description = "Returns files shared with the current user.")
@@ -122,13 +123,13 @@ public class ShareController {
 
     @GetMapping("/shared/{fileIdx}/download")
     @Operation(summary = "Download shared file", description = "Downloads a received shared file through the backend.")
-    public ResponseEntity<byte[]> downloadSharedFile(
+    public ResponseEntity<StreamingResponseBody> downloadSharedFile(
             @AuthenticationPrincipal AuthUserDetails userDetails,
             @PathVariable Long fileIdx
     ) {
-        return buildDownloadResponse(
-                shareService.downloadSharedFile(userDetails != null ? userDetails.getIdx() : 0L, fileIdx)
-        );
+        Long userIdx = userDetails != null ? userDetails.getIdx() : 0L;
+        FileCommonDto.FileDownloadDescriptor descriptor = shareService.downloadSharedFile(userIdx, fileIdx);
+        return trackedDownloadService.streamObject(userIdx, descriptor);
     }
 
     @GetMapping("/shared/{fileIdx}/download-link")
@@ -181,32 +182,6 @@ public class ShareController {
                 .lastModified(payload.lastModifiedEpochMillis())
                 .contentType(MediaType.parseMediaType(payload.contentType()))
                 .body(payload.bytes());
-    }
-
-    private ResponseEntity<byte[]> buildDownloadResponse(FileCommonDto.FileDownloadPayload payload) {
-        return ResponseEntity.ok()
-                .header(
-                        HttpHeaders.CONTENT_DISPOSITION,
-                        ContentDisposition.attachment()
-                                .filename(payload.fileName(), StandardCharsets.UTF_8)
-                                .build()
-                                .toString()
-                )
-                .contentLength(payload.contentLength() != null ? payload.contentLength() : payload.bytes().length)
-                .contentType(resolveMediaType(payload.contentType()))
-                .body(payload.bytes());
-    }
-
-    private MediaType resolveMediaType(String contentType) {
-        if (contentType == null || contentType.isBlank()) {
-            return MediaType.APPLICATION_OCTET_STREAM;
-        }
-
-        try {
-            return MediaType.parseMediaType(contentType);
-        } catch (Exception ignored) {
-            return MediaType.APPLICATION_OCTET_STREAM;
-        }
     }
 
     private boolean matchesEtag(String ifNoneMatch, String eTag) {
