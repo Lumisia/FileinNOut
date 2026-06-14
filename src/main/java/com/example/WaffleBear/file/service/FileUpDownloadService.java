@@ -37,7 +37,7 @@ public interface FileUpDownloadService {
 
     FileCommonDto.FileActionRes setLockedFiles(Long userIdx, List<Long> fileIdxList, boolean locked);
 
-    FileCommonDto.FileDownloadPayload downloadFile(Long userIdx, Long fileIdx);
+    FileCommonDto.FileDownloadDescriptor downloadFile(Long userIdx, Long fileIdx);
 
     String getDownloadUrl(Long userIdx, Long fileIdx);
 }

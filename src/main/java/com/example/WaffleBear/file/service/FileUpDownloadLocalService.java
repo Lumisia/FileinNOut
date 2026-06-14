@@ -95,7 +95,7 @@ public class FileUpDownloadLocalService implements FileUpDownloadService {
     }
 
     @Override
-    public FileCommonDto.FileDownloadPayload downloadFile(Long userIdx, Long fileIdx) {
+    public FileCommonDto.FileDownloadDescriptor downloadFile(Long userIdx, Long fileIdx) {
         throw new UnsupportedOperationException("Local service currently does not support download operations.");
     }
 

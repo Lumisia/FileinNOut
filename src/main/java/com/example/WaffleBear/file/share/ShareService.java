@@ -1,5 +1,6 @@
 package com.example.WaffleBear.file.share;
 
+import com.example.WaffleBear.administrator.storage.DataTransferSource;
 import com.example.WaffleBear.common.exception.BaseException;
 import com.example.WaffleBear.common.model.BaseResponseStatus;
 import com.example.WaffleBear.config.MinioProperties;
@@ -369,9 +370,10 @@ public class ShareService {
         }
     }
 
-    public FileCommonDto.FileDownloadPayload downloadSharedFile(Long userIdx, Long fileIdx) {
+    public FileCommonDto.FileDownloadDescriptor downloadSharedFile(Long userIdx, Long fileIdx) {
         requireAuthenticated(userIdx);
-        FileInfo file = getSharedRecord(userIdx, fileIdx).getFile();
+        FileShare share = getSharedRecord(userIdx, fileIdx);
+        FileInfo file = share.getFile();
         ensureAccessibleSharedFile(file);
 
         String objectKey = file.getFileSavePath();
@@ -379,11 +381,14 @@ public class ShareService {
             throw BaseException.from(BaseResponseStatus.REQUEST_ERROR);
         }
 
-        return new FileCommonDto.FileDownloadPayload(
-                readObjectBytes(minioProperties.getBucket_cloud(), objectKey),
+        return new FileCommonDto.FileDownloadDescriptor(
+                minioProperties.getBucket_cloud(),
+                objectKey,
                 resolveDownloadContentType(file.getFileOriginName()),
                 sanitizeDownloadFileName(file.getFileOriginName(), file.getFileSaveName()),
-                file.getFileSize()
+                file.getFileSize(),
+                DataTransferSource.SHARED_FILE,
+                "shared:" + fileIdx
         );
     }
 
@@ -655,19 +660,6 @@ private String resolveTextContentType(String fileFormat) {
             return "text/csv";
     }
     return "text/plain";
-}
-
-private byte[] readObjectBytes(String bucketName, String objectKey) {
-    try (var objectStream = minioClient.getObject(
-            GetObjectArgs.builder()
-                    .bucket(bucketName)
-                    .object(objectKey)
-                    .build()
-    )) {
-        return objectStream.readAllBytes();
-    } catch (Exception exception) {
-        throw BaseException.from(BaseResponseStatus.REQUEST_ERROR);
-    }
 }
 
 private String generateAttachmentDownloadUrl(String objectKey, String fileName, String contentType) {

@@ -58,7 +58,7 @@ public class FileManageService {
         return fileUpDownloadService.restoreFilesFromTrash(userIdx, fileIdxList);
     }
 
-    public FileCommonDto.FileDownloadPayload downloadFile(Long userIdx, Long fileIdx) {
+    public FileCommonDto.FileDownloadDescriptor downloadFile(Long userIdx, Long fileIdx) {
         return fileUpDownloadService.downloadFile(userIdx, fileIdx);
     }
 
