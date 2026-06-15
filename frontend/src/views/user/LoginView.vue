@@ -4,9 +4,11 @@ import { useRouter } from 'vue-router'
 import api from '@/api/user'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { apiPath } from '@/utils/backendUrl'
+import { useToastStore } from '@/stores/useToastStore'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const toast = useToastStore()
 
 const isLoading = ref(false)
 const loginErrorMessage = ref('')
@@ -86,7 +88,7 @@ const handleLogin = async () => {
       // 즉시 이동
       router.push({ name: 'main' });
     } else {
-      alert("회원 정보가 일치하지 않습니다.");
+      toast.error("회원 정보가 일치하지 않습니다.");
     }
   } catch (error) {
     loginErrorMessage.value = '로그인 정보가 일치하지 않습니다.';

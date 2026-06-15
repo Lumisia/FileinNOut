@@ -4,6 +4,7 @@ import postApi from "@/api/postApi";
 import loadpost from "@/components/workspace/loadpost";
 import { fetchGroupOverview, shareWorkspacesWithTargets } from "@/api/groupApi";
 import GroupRecipientSelector from "@/components/group/GroupRecipientSelector.vue";
+import { useToastStore } from "@/stores/useToastStore";
 
 const props = defineProps({
   isOpen: Boolean,
@@ -13,6 +14,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(["close", "refresh"]);
+const toast = useToastStore();
 
 const privacyStatus = ref(props.initialStatus || "Private");
 const overview = ref(null);
@@ -75,7 +77,7 @@ watch(
 const copyLink = async () => {
   if (privacyStatus.value !== "Public") return;
   await navigator.clipboard.writeText(inviteUrl.value);
-  window.alert("링크가 클립보드에 복사되었습니다.");
+  toast.success("링크가 클립보드에 복사되었습니다.");
 };
 
 const handleShareTargets = async () => {
@@ -134,11 +136,11 @@ const handleSaveStatus = async () => {
       await loadpost.side_list();
     }
     emit("refresh");
-    window.alert("공유 설정이 저장되었습니다.");
+    toast.success("공유 설정이 저장되었습니다.");
     emit("close");
   } catch (error) {
     console.error("Save Status Error:", error);
-    window.alert("설정 저장 중 오류가 발생했습니다.");
+    toast.error("설정 저장 중 오류가 발생했습니다.");
   } finally {
     isSavingStatus.value = false;
   }

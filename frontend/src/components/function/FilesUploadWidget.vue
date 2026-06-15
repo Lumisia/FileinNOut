@@ -157,9 +157,11 @@ import { onBeforeRouteLeave } from "vue-router";
 import { abortUpload, completeUpload, initUploadFiles, parseUploadResponse } from "@/api/filesApi.js";
 import { api } from "@/plugins/axiosinterceptor";
 import { useFileStore } from "@/stores/useFileStore";
+import { useDialog } from "@/composables/useDialog";
 
 const emit = defineEmits(["upload-complete", "upload-fail"]);
 const fileStore = useFileStore();
+const { prompt } = useDialog();
 
 const PARTITION_SIZE_BYTES = 100 * 1024 * 1024;
 const CHUNK_SIZE_BYTES = 80 * 1024 * 1024;
@@ -920,8 +922,8 @@ async function handleRefreshRequest() {
   window.location.reload();
 }
 
-function createNewFolder() {
-  const folderName = prompt("폴더 이름을 입력해 주세요.");
+async function createNewFolder() {
+  const folderName = await prompt({ title: "새 폴더", label: "폴더 이름", placeholder: "폴더 이름을 입력해 주세요." });
   if (!folderName?.trim()) {
     closeDropdown();
     return;

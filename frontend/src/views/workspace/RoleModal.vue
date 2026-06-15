@@ -1,6 +1,7 @@
 <script setup>
 import { ref, watch } from 'vue';
 import postApi from '@/api/postApi';
+import { useToastStore } from '@/stores/useToastStore';
 
 const props = defineProps({
   isOpen: Boolean,
@@ -12,6 +13,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['close', 'refresh']);
+const toast = useToastStore();
 
 // 내부에서 수정할 수 있도록 리스트 복사
 const roleList = ref([]);
@@ -40,13 +42,13 @@ const handleSaveRole = async () => {
 
     console.log(response);
     
-    alert('권한 설정이 저장되었습니다.');
+    toast.success('권한 설정이 저장되었습니다.');
     
     emit('refresh'); // 사이드바 또는 부모 데이터 갱신
     emit('close');
   } catch (error) {
     console.error('Save Role Error:', error);
-    alert('권한 저장 중 오류가 발생했습니다.');
+    toast.error('권한 저장 중 오류가 발생했습니다.');
   }
 };
 </script>

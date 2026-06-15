@@ -8,6 +8,8 @@ import {
   getFileThumbnailCacheKey,
   loadFileThumbnailUrl,
 } from "@/utils/fileThumbnailCache.js";
+import { useToastStore } from "@/stores/useToastStore";
+import { useDialog } from "@/composables/useDialog";
 
 const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "gif", "svg", "webp", "bmp", "heic", "avif", "apng", "jfif", "tif", "tiff"]);
 const VIDEO_EXTENSIONS = new Set(["mp4", "webm", "mov", "mkv", "avi", "wmv", "m4v", "mpeg", "mpg", "ogv", "3gp"]);
@@ -52,6 +54,8 @@ const emit = defineEmits([
 ]);
 
 const fileStore = useFileStore();
+const toast = useToastStore();
+const { confirm } = useDialog();
 const { viewMode, resolvedLayoutColumns } = useViewStore();
 const brokenPreviewIds = ref([]);
 const brokenThumbnailIds = ref([]);
@@ -402,7 +406,7 @@ const handleDownload = async (file, event) => {
     }
     await downloadFileAsset(file);
   } catch (error) {
-    window.alert(error?.message || "\uD30C\uC77C\uC744 \uB2E4\uC6B4\uB85C\uB4DC\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.");
+    toast.error(error?.message || "\uD30C\uC77C\uC744 \uB2E4\uC6B4\uB85C\uB4DC\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.");
   } finally {
     if (fileId) {
       downloadingIds.value = downloadingIds.value.filter((id) => id !== fileId);
@@ -506,7 +510,7 @@ const toggleSelectAllVisible = (checked) => {
 
 const ensureUnlocked = (file) => {
   if (isLocked(file)) {
-    window.alert("이 파일은 잠겨있습니다.");
+    toast.warning("이 파일은 잠겨있습니다.");
     return false;
   }
 
@@ -532,29 +536,30 @@ const handlePrimaryAction = (file) => {
   emit("preview-file", file);
 };
 
-const onClickDelete = (file, event) => {
+const onClickDelete = async (file, event) => {
   event.stopPropagation();
   if (!canDelete(file)) {
     return;
   }
 
-  const targetLabel = file?.type === "folder" ? "폴더" : "파일";
-  const confirmMessage = props.deleteMode === "permanent"
-    ? `'${getFileName(file)}' ${targetLabel}을(를) 영구 삭제하시겠습니까?`
-    : `'${getFileName(file)}' ${targetLabel}을(를) 휴지통으로 이동하시겠습니까?`;
-
-  if (window.confirm(getDeleteConfirmMessage(file))) {
+  const isPermanent = props.deleteMode === "permanent";
+  if (await confirm({
+    title: isPermanent ? "영구 삭제" : "삭제",
+    message: getDeleteConfirmMessage(file),
+    confirmText: isPermanent ? "영구 삭제" : "삭제",
+    danger: true,
+  })) {
     emit("delete-file", file?.id);
   }
 };
 
-const onClickRestore = (file, event) => {
+const onClickRestore = async (file, event) => {
   event.stopPropagation();
   if (!canRestore(file)) {
     return;
   }
 
-  if (window.confirm(`'${getFileName(file)}' 항목을 원래 위치로 복구하시겠습니까?`)) {
+  if (await confirm({ title: "복구", message: `'${getFileName(file)}' 항목을 원래 위치로 복구하시겠습니까?`, confirmText: "복구" })) {
     emit("restore-file", file?.id);
   }
 };
@@ -692,7 +697,7 @@ const onDropToFolder = async (event, folder) => {
 
     updateSelectedIds(props.selectedIds.filter((id) => !draggedFileIds.includes(String(id))));
   } catch (error) {
-    window.alert(
+    toast.error(
       error?.response?.data?.message ||
       error?.message ||
       "폴더로 이동하지 못했습니다.",
@@ -743,7 +748,7 @@ const onDropToParentNavigator = async (event) => {
 
     updateSelectedIds(props.selectedIds.filter((id) => !draggedFileIds.includes(String(id))));
   } catch (error) {
-    window.alert(
+    toast.error(
       error?.response?.data?.message ||
       error?.message ||
       "상위 폴더로 이동하지 못했습니다.",

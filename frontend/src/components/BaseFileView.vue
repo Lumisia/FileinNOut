@@ -7,6 +7,8 @@ import { downloadFileAsset } from "@/api/filesApi.js";
 import { fetchGroupOverview, shareFilesWithTargets } from "@/api/groupApi";
 import { useFileStore } from "@/stores/useFileStore";
 import { useViewStore } from "@/stores/viewStore";
+import { useToastStore } from "@/stores/useToastStore";
+import { useDialog } from "@/composables/useDialog";
 import {
   FILE_SIZE_OPTIONS,
   FILE_STATUS_OPTIONS,
@@ -28,6 +30,8 @@ const props = defineProps({
 const emit = defineEmits(["delete"]);
 
 const fileStore = useFileStore();
+const toast = useToastStore();
+const { confirm } = useDialog();
 const route = useRoute();
 const headerSearchStore = useHeaderSearchStore();
 const {
@@ -124,7 +128,7 @@ const triggerDownload = async (file) => {
   try {
     await downloadFileAsset(file);
   } catch (error) {
-    window.alert(error?.message || "\uD30C\uC77C\uC744 \uB2E4\uC6B4\uB85C\uB4DC\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.");
+    toast.error(error?.message || "\uD30C\uC77C\uC744 \uB2E4\uC6B4\uB85C\uB4DC\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.");
   }
 };
 
@@ -437,7 +441,7 @@ const handleRestore = async (fileId) => {
     await fileStore.restoreFromTrash(fileId);
     selectedIds.value = selectedIds.value.filter((id) => String(id) !== String(fileId));
   } catch (error) {
-    window.alert(error?.response?.data?.message || error?.message || "파일을 원래 위치로 복구하지 못했습니다.");
+    toast.error(error?.response?.data?.message || error?.message || "파일을 원래 위치로 복구하지 못했습니다.");
   }
 };
 
@@ -448,14 +452,14 @@ const handleRestoreSelected = async () => {
     await fileStore.restoreFilesBatch(selectedFiles.value.map((file) => file.id));
     clearSelection();
   } catch (error) {
-    window.alert(error?.response?.data?.message || error?.message || "선택한 항목을 원래 위치로 복구하지 못했습니다.");
+    toast.error(error?.response?.data?.message || error?.message || "선택한 항목을 원래 위치로 복구하지 못했습니다.");
   }
 };
 
 const handleDeleteSelected = async () => {
   if (!selectedFiles.value.length) return;
   if (selectedFiles.value.some((file) => file?.lockedFile)) {
-    window.alert("\uC7A0\uAE34 \uD30C\uC77C\uC740 \uC0AD\uC81C\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.");
+    toast.warning("\uC7A0\uAE34 \uD30C\uC77C\uC740 \uC0AD\uC81C\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.");
     return;
   }
   const confirmMessage = selectedFiles.value.some(isOwnedSharedFile)
@@ -463,20 +467,20 @@ const handleDeleteSelected = async () => {
     : props.deleteMode === "permanent"
       ? "\uC120\uD0DD\uD55C " + selectedFiles.value.length + "\uAC1C \uD56D\uBAA9\uC744 \uC601\uAD6C \uC0AD\uC81C\uD558\uC2DC\uACA0\uC2B5\uB2C8\uAE4C?"
       : "\uC120\uD0DD\uD55C " + selectedFiles.value.length + "\uAC1C \uD56D\uBAA9\uC744 \uD734\uC9C0\uD1B5\uC73C\uB85C \uC774\uB3D9\uD558\uC2DC\uACA0\uC2B5\uB2C8\uAE4C?";
-  if (!window.confirm(confirmMessage)) return;
+  if (!(await confirm({ title: props.deleteMode === 'permanent' ? '영구 삭제' : '삭제', message: confirmMessage, confirmText: props.deleteMode === 'permanent' ? '영구 삭제' : '삭제', danger: true }))) return;
   try {
     const ids = selectedFiles.value.map((file) => file.id);
     if (props.deleteMode === "permanent") await fileStore.permanentlyDeleteBatch(ids);
     else await fileStore.trashFilesBatch(ids);
     clearSelection();
   } catch (error) {
-    window.alert(error?.response?.data?.message || error?.message || "\uC120\uD0DD\uD55C \uD56D\uBAA9\uC744 \uCC98\uB9AC\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.");
+    toast.error(error?.response?.data?.message || error?.message || "\uC120\uD0DD\uD55C \uD56D\uBAA9\uC744 \uCC98\uB9AC\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.");
   }
 };
 
 const handleBatchDownload = () => {
   if (!selectedDownloadableFiles.value.length) {
-    window.alert("\uB2E4\uC6B4\uB85C\uB4DC\uD560 \uC218 \uC788\uB294 \uD30C\uC77C\uC774 \uC120\uD0DD\uB418\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4.");
+    toast.warning("\uB2E4\uC6B4\uB85C\uB4DC\uD560 \uC218 \uC788\uB294 \uD30C\uC77C\uC774 \uC120\uD0DD\uB418\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4.");
     return;
   }
   selectedDownloadableFiles.value.forEach((file, index) => {
@@ -487,15 +491,15 @@ const handleBatchDownload = () => {
 const handleSaveSharedToDrive = async (file) => {
   try {
     await fileStore.saveSharedFileToDrive(file.id, fileStore.currentFolderId);
-    window.alert("\uB0B4 \uB4DC\uB77C\uC774\uBE0C\uC5D0 \uC800\uC7A5\uD588\uC2B5\uB2C8\uB2E4.");
+    toast.success("\uB0B4 \uB4DC\uB77C\uC774\uBE0C\uC5D0 \uC800\uC7A5\uD588\uC2B5\uB2C8\uB2E4.");
   } catch (error) {
-    window.alert(error?.response?.data?.message || error?.message || "\uACF5\uC720 \uD30C\uC77C\uC744 \uC800\uC7A5\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.");
+    toast.error(error?.response?.data?.message || error?.message || "\uACF5\uC720 \uD30C\uC77C\uC744 \uC800\uC7A5\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.");
   }
 };
 
 const handleBatchSaveShared = async () => {
   if (!selectedSharedFiles.value.length) {
-    window.alert("\uB0B4 \uB4DC\uB77C\uC774\uBE0C\uB85C \uC800\uC7A5\uD560 \uACF5\uC720 \uD30C\uC77C\uC774 \uC120\uD0DD\uB418\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4.");
+    toast.warning("\uB0B4 \uB4DC\uB77C\uC774\uBE0C\uB85C \uC800\uC7A5\uD560 \uACF5\uC720 \uD30C\uC77C\uC774 \uC120\uD0DD\uB418\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4.");
     return;
   }
   try {
@@ -503,15 +507,15 @@ const handleBatchSaveShared = async () => {
       await fileStore.saveSharedFileToDrive(file.id, fileStore.currentFolderId);
     }
     clearSelection();
-    window.alert("\uC120\uD0DD\uD55C \uACF5\uC720 \uD30C\uC77C\uC744 \uB0B4 \uB4DC\uB77C\uC774\uBE0C\uC5D0 \uC800\uC7A5\uD588\uC2B5\uB2C8\uB2E4.");
+    toast.success("\uC120\uD0DD\uD55C \uACF5\uC720 \uD30C\uC77C\uC744 \uB0B4 \uB4DC\uB77C\uC774\uBE0C\uC5D0 \uC800\uC7A5\uD588\uC2B5\uB2C8\uB2E4.");
   } catch (error) {
-    window.alert(error?.response?.data?.message || error?.message || "\uACF5\uC720 \uD30C\uC77C\uC744 \uC800\uC7A5\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.");
+    toast.error(error?.response?.data?.message || error?.message || "\uACF5\uC720 \uD30C\uC77C\uC744 \uC800\uC7A5\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.");
   }
 };
 
 const handleBatchCancelSentShares = async () => {
   if (!selectedCancelableSentSharedFiles.value.length) {
-    window.alert("공유 취소할 내가 공유한 파일이 선택되지 않았습니다.");
+    toast.warning("공유 취소할 내가 공유한 파일이 선택되지 않았습니다.");
     return;
   }
 
@@ -521,7 +525,7 @@ const handleBatchCancelSentShares = async () => {
     ? `선택한 항목 중 내가 공유한 파일 ${cancelTargetCount}개만 공유 취소됩니다. 계속할까요?`
     : `선택한 ${cancelTargetCount}개 파일의 공유를 모두 취소하시겠습니까?`;
 
-  if (!window.confirm(confirmMessage)) {
+  if (!(await confirm({ title: '공유 취소', message: confirmMessage, confirmText: '공유 취소', danger: true }))) {
     return;
   }
 
@@ -530,9 +534,9 @@ const handleBatchCancelSentShares = async () => {
     const targetIdSet = new Set(targetIds.map((id) => String(id)));
     await fileStore.cancelAllSharedFiles(targetIds);
     selectedIds.value = selectedIds.value.filter((id) => !targetIdSet.has(String(id)));
-    window.alert("선택한 파일의 공유를 모두 취소했습니다.");
+    toast.success("선택한 파일의 공유를 모두 취소했습니다.");
   } catch (error) {
-    window.alert(error?.response?.data?.message || error?.message || "선택한 파일의 공유를 취소하지 못했습니다.");
+    toast.error(error?.response?.data?.message || error?.message || "선택한 파일의 공유를 취소하지 못했습니다.");
   }
 };
 
@@ -646,7 +650,7 @@ const loadShareGroupOverview = async () => {
 const openShareDialog = async (files = selectedOwnedShareableFiles.value) => {
   const nextTargets = normalizeShareTargets(files).filter((file) => !file?.sharedWithMe && file?.type !== "folder" && (canCreateShares.value || file?.sharedFile));
   if (!nextTargets.length) {
-    window.alert(canCreateShares.value ? "\uACF5\uC720\uD560 \uC218 \uC788\uB294 \uD30C\uC77C\uC744 \uC120\uD0DD\uD574 \uC8FC\uC138\uC694." : "\uD604\uC7AC \uBA64\uBC84\uC2ED\uC5D0\uC11C\uB294 \uC0C8 \uACF5\uC720\uB97C \uCD94\uAC00\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.");
+    toast.warning(canCreateShares.value ? "\uACF5\uC720\uD560 \uC218 \uC788\uB294 \uD30C\uC77C\uC744 \uC120\uD0DD\uD574 \uC8FC\uC138\uC694." : "\uD604\uC7AC \uBA64\uBC84\uC2ED\uC5D0\uC11C\uB294 \uC0C8 \uACF5\uC720\uB97C \uCD94\uAC00\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.");
     return;
   }
   shareTargets.value = nextTargets;
@@ -730,11 +734,11 @@ const cancelShare = async (recipientEmail = shareCancelEmail.value) => {
 
 const handleBatchLock = async (locked) => {
   if (!selectedLockableFiles.value.length) {
-    window.alert("\uC7A0\uAE00 \uC218 \uC788\uB294 \uD30C\uC77C\uC774 \uC120\uD0DD\uB418\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4.");
+    toast.warning("\uC7A0\uAE00 \uC218 \uC788\uB294 \uD30C\uC77C\uC774 \uC120\uD0DD\uB418\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4.");
     return;
   }
   if (locked && !canCreateLocks.value) {
-    window.alert("\uD604\uC7AC \uBA64\uBC84\uC2ED\uC5D0\uC11C\uB294 \uD30C\uC77C \uC7A0\uAE08 \uAE30\uB2A5\uC744 \uC0AC\uC6A9\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.");
+    toast.warning("\uD604\uC7AC \uBA64\uBC84\uC2ED\uC5D0\uC11C\uB294 \uD30C\uC77C \uC7A0\uAE08 \uAE30\uB2A5\uC744 \uC0AC\uC6A9\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.");
     return;
   }
   try {
@@ -742,19 +746,19 @@ const handleBatchLock = async (locked) => {
     await fileStore.setFilesLocked(targetFiles.map((file) => file.id), locked);
     clearSelection();
   } catch (error) {
-    window.alert(error?.response?.data?.message || error?.message || "\uD30C\uC77C \uC7A0\uAE08 \uC0C1\uD0DC\uB97C \uBCC0\uACBD\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.");
+    toast.error(error?.response?.data?.message || error?.message || "\uD30C\uC77C \uC7A0\uAE08 \uC0C1\uD0DC\uB97C \uBCC0\uACBD\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.");
   }
 };
 
 const handleToggleLock = async (file) => {
   if (!file?.lockedFile && !canCreateLocks.value) {
-    window.alert("\uD604\uC7AC \uBA64\uBC84\uC2ED\uC5D0\uC11C\uB294 \uD30C\uC77C \uC7A0\uAE08 \uAE30\uB2A5\uC744 \uC0AC\uC6A9\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.");
+    toast.warning("\uD604\uC7AC \uBA64\uBC84\uC2ED\uC5D0\uC11C\uB294 \uD30C\uC77C \uC7A0\uAE08 \uAE30\uB2A5\uC744 \uC0AC\uC6A9\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.");
     return;
   }
   try {
     await fileStore.setFilesLocked([file.id], !file.lockedFile);
   } catch (error) {
-    window.alert(error?.response?.data?.message || error?.message || "\uD30C\uC77C \uC7A0\uAE08 \uC0C1\uD0DC\uB97C \uBCC0\uACBD\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.");
+    toast.error(error?.response?.data?.message || error?.message || "\uD30C\uC77C \uC7A0\uAE08 \uC0C1\uD0DC\uB97C \uBCC0\uACBD\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.");
   }
 };
 

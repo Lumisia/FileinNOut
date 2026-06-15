@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useFileStore } from "@/stores/useFileStore";
 import { downloadFileAsset } from "@/api/filesApi.js";
+import { useToastStore } from "@/stores/useToastStore";
 
 const props = defineProps({
   file: {
@@ -12,6 +13,7 @@ const props = defineProps({
 
 const emit = defineEmits(["close"]);
 const fileStore = useFileStore();
+const toast = useToastStore();
 const textPreview = ref(null);
 const textPreviewError = ref("");
 const isTextPreviewLoading = ref(false);
@@ -46,7 +48,7 @@ const handleDownload = async () => {
     isDownloading.value = true;
     await downloadFileAsset(props.file);
   } catch (error) {
-    window.alert(error?.message || "\uD30C\uC77C\uC744 \uB2E4\uC6B4\uB85C\uB4DC\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.");
+    toast.error(error?.message || "\uD30C\uC77C\uC744 \uB2E4\uC6B4\uB85C\uB4DC\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.");
   } finally {
     isDownloading.value = false;
   }
