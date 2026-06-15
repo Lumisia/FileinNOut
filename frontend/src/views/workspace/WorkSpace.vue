@@ -4,6 +4,7 @@ import { useRoute, useRouter, onBeforeRouteLeave, onBeforeRouteUpdate } from 'vu
 import { downloadFileAsset } from '@/api/filesApi'
 import postApi from '@/api/postApi'
 import { initEditor } from '@/components/workspace/editor'
+import loadpost from '@/components/workspace/loadpost'
 import { useAuthStore } from '@/stores/useAuthStore'
 import SockJS from 'sockjs-client'
 import Stomp from 'stompjs'
@@ -18,6 +19,7 @@ const editorHolder    = ref(null)
 const editorApi       = ref(null)
 const title           = ref('')
 const isEditorLoading = ref(false)
+const isSaving        = ref(false)
 const showUserList    = ref(false)
 const titleDirty      = ref(false)
 const allowRouteLeaveOnce  = ref(false)
@@ -39,6 +41,11 @@ const savingWorkspaceAssetIds = ref([])
 
 // ✅ 드롭다운 열림 상태
 const openRoleDropdownId = ref(null)
+
+// ✅ 참여자 팝오버: body 로 Teleport + 버튼 기준 위치 계산 (stacking context 트랩 회피)
+const presenceBtnRef = ref(null)
+const popoverStyle   = ref({})
+const POPOVER_WIDTH  = 280
 
 // ─── 계산 속성 ────────────────────────────────────────────────────────────────
 const isValid = computed(() => title.value.trim().length > 0)
@@ -110,10 +117,9 @@ const normalizeWorkspaceAsset = (asset = {}) => ({
 })
 
 const syncTheme = () => {
-  const savedTheme    = localStorage.getItem('theme')
-  const shouldUseDark =
-    savedTheme === 'dark' ||
-    (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)
+  // 앱 전역 테마(Header.initTheme)와 동일: 저장값이 'dark'일 때만 다크.
+  // prefers-color-scheme fallback 제거 → 워크스페이스만 다크로 들어가는 문제 해결.
+  const shouldUseDark = localStorage.getItem('theme') === 'dark'
   document.documentElement.classList.toggle('dark', shouldUseDark)
 }
 
@@ -280,15 +286,21 @@ const previewVersion = async (versionNum) => {
 
 // ─── 저장 ─────────────────────────────────────────────────────────────────────
 const handleSave = async () => {
-  if (!editorApi.value?.savePost) return
-  const response         = await editorApi.value.savePost()
-  const savedWorkspaceId = response?.result?.body?.idx ?? response?.data?.idx ?? response?.idx ?? null
-  if (!savedWorkspaceId) return
-  titleDirty.value = false
-  editorApi.value?.markSaved?.()
-  workspaceId.value         = Number(savedWorkspaceId)
-  workspaceAccessRole.value = 'ADMIN'
-  router.push(`/workspace/read/${savedWorkspaceId}`)
+  if (!editorApi.value?.savePost || isSaving.value) return
+  // 저장 진행 중에는 버튼 비활성(회색), 완료되면 원래(파란색)로 복귀
+  isSaving.value = true
+  try {
+    const response         = await editorApi.value.savePost()
+    const savedWorkspaceId = response?.result?.body?.idx ?? response?.data?.idx ?? response?.idx ?? null
+    if (!savedWorkspaceId) return
+    titleDirty.value = false
+    editorApi.value?.markSaved?.()
+    workspaceId.value         = Number(savedWorkspaceId)
+    workspaceAccessRole.value = 'ADMIN'
+    router.push(`/workspace/read/${savedWorkspaceId}`)
+  } finally {
+    isSaving.value = false
+  }
 }
 
 const handleTitleInput = (event) => {
@@ -327,7 +339,8 @@ const handleSseRoleChanged = (evt) => {
   if (newRole === 'KICKED') {
     alert('해당 워크스페이스에서 추방되었습니다.')
     allowRouteLeaveOnce.value = true
-    router.push('/workspace')
+    // 홈으로 강제 이동 + 사이드바 협업목록 갱신(추방된 워크스페이스 제거)
+    router.push({ name: 'home' }).finally(() => { loadpost.side_list() })
   } else {
     // 권한이 변경되면 페이지 새로고침으로 최신 권한 반영
     allowWindowUnloadOnce.value = true
@@ -338,6 +351,34 @@ const handleSseRoleChanged = (evt) => {
 // ─── 드롭다운 외부 클릭 시 닫기 ──────────────────────────────────────────────
 const closeRoleDropdown = () => {
   openRoleDropdownId.value = null
+}
+
+// ─── 참여자 팝오버 위치 계산 / 토글 ──────────────────────────────────────────
+const updatePopoverPosition = () => {
+  const el = presenceBtnRef.value
+  if (!el) return
+  const rect = el.getBoundingClientRect()
+  // body 로 Teleport → 문서 좌표(absolute) 기준. scroll 은 자동 추적, 버튼 우측 정렬.
+  const left = Math.max(8, rect.right + window.scrollX - POPOVER_WIDTH)
+  popoverStyle.value = {
+    position: 'absolute',
+    top:   `${rect.bottom + window.scrollY + 6}px`,
+    left:  `${left}px`,
+    right: 'auto',
+  }
+}
+
+const togglePresence = async () => {
+  showUserList.value = !showUserList.value
+  if (showUserList.value) {
+    openRoleDropdownId.value = null
+    await nextTick()
+    updatePopoverPosition()
+  }
+}
+
+const handlePresenceReposition = () => {
+  if (showUserList.value) updatePopoverPosition()
 }
 
 // ─── 워처 ─────────────────────────────────────────────────────────────────────
@@ -607,6 +648,8 @@ const checkAndRedirectUuid = async () => {
     const response = await postApi.getPostByUuid(uuid)
     const data     = response?.result?.body || response?.data || response
     if (data?.idx) {
+      // 공개 링크로 합류한 워크스페이스가 왼쪽 사이드바 '협업 페이지'에 바로 보이도록 목록 갱신
+      await loadpost.side_list()
       await router.replace({ name: 'workspace_read', params: { id: data.idx } })
       return true
     }
@@ -628,6 +671,8 @@ onMounted(async () => {
   window.addEventListener('beforeunload', handleBeforeUnload)
   // 드롭다운 외부 클릭 닫기
   window.addEventListener('click', closeRoleDropdown)
+  // 참여자 팝오버 위치 재계산
+  window.addEventListener('resize', handlePresenceReposition)
 })
 
 watch(() => route.params.id, async () => { await setupEditor() })
@@ -649,6 +694,7 @@ onBeforeUnmount(async () => {
   window.removeEventListener('sse-role-changed', handleSseRoleChanged)
   window.removeEventListener('beforeunload', handleBeforeUnload)
   window.removeEventListener('click', closeRoleDropdown)
+  window.removeEventListener('resize', handlePresenceReposition)
 
   if (editorApi.value?.destroy) {
     if (editorApi.value.editor?.isReady) await editorApi.value.editor.isReady
@@ -664,11 +710,12 @@ onBeforeUnmount(async () => {
         <input :value="title" placeholder="제목 없음" class="title-input" @input="handleTitleInput" />
 
         <div class="user-presence-wrapper">
-          <button class="presence-toggle-btn" @click.stop="showUserList = !showUserList">
+          <button ref="presenceBtnRef" class="presence-toggle-btn" @click.stop="togglePresence">
             <span class="user-count-badge">{{ activeUsers.length }}</span>
             참여자
           </button>
-          <div v-if="showUserList" class="user-list-popover" @click.stop>
+          <Teleport to="body">
+          <div v-if="showUserList" class="user-list-popover" :style="popoverStyle" @click.stop>
             <div class="popover-title">현재 참여 중인 사용자</div>
             <div class="user-item-list">
               <div v-for="user in activeUsers" :key="user.clientId" class="user-item">
@@ -721,10 +768,11 @@ onBeforeUnmount(async () => {
               </div>
             </div>
           </div>
+          </Teleport>
         </div>
 
         <div class="flex items-center gap-2">
-          <button :disabled="!isValid" @click="handleSave" class="save-btn">저장</button>
+          <button :disabled="!isValid || isSaving" @click="handleSave" class="save-btn">{{ isSaving ? '저장 중...' : '저장' }}</button>
           <button
             v-if="workspaceId"
             @click="openVersionPanel"
@@ -737,7 +785,8 @@ onBeforeUnmount(async () => {
         </div>
       </div>
 
-      <!-- 버전 이력 패널 -->
+      <!-- 버전 이력 패널 (body 로 Teleport → 조상 stacking/containing-block 영향 제거) -->
+      <Teleport to="body">
       <div
         v-if="versionPanelOpen"
         class="fixed inset-0 z-[900] flex items-start justify-end"
@@ -783,6 +832,7 @@ onBeforeUnmount(async () => {
           </div>
         </div>
       </div>
+      </Teleport>
 
       <div class="workspace-assets">
         <div class="workspace-assets__header">
@@ -1059,15 +1109,13 @@ onBeforeUnmount(async () => {
 }
 
 .user-list-popover {
-  position: absolute;
-  top: 45px;
-  right: 0;
+  /* body 로 Teleport → top/left 는 인라인 style(popoverStyle)로 주입, position:absolute */
   width: 280px;
   background: var(--editor-bg);
   border: 1px solid var(--editor-border);
   border-radius: 12px;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
-  z-index: 9999;         /* ✅ 1000 → 9999 */
+  z-index: 100000;       /* 모든 워크스페이스 콘텐츠 위 */
   padding: 16px;
 }
 

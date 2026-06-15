@@ -25,7 +25,6 @@ bin/
 out/
 !**/src/main/**/out/
 !**/src/test/**/out/
-.env
 
 ### NetBeans ###
 /nbproject/private/
@@ -36,9 +35,29 @@ out/
 
 ### VS Code ###
 .vscode/
-.env
 
-keystore.p12
+### Environment and credentials ###
+.env
+.env.*
+!.env.example
+*.key
+*.p12
+*.jks
+id_rsa*
+id_ed25519*
+
+### Local runtime data ###
+/db/
+
+### Local deployment secrets and overrides ###
+/cicd/k8s/**/*.local.yaml
+/cicd/k8s/**/*.local.yml
+/cicd/k8s/**/*-secret.yaml
+/cicd/k8s/**/*-secret.yml
+/cicd/k8s/**/secret*.yaml
+/cicd/k8s/**/secret*.yml
+/cicd/k8s/**/kubeconfig*
+
 deploy-backend.bat
 frontend/k8s/backend-configmap.yaml
 /cicd/helm/values.private.yaml

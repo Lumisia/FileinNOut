@@ -1,0 +1,73 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: db-data
+  namespace: waffle
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: db
+  namespace: waffle
+  labels:
+    app: db
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: db
+  template:
+    metadata:
+      labels:
+        app: db
+    spec:
+      containers:
+        - name: mariadb
+          image: mariadb:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: MARIADB_DATABASE
+              value: "web"
+            - name: MARIADB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: waffle-secret
+                  key: DB_PASS
+          ports:
+            - containerPort: 3306
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "mariadb-admin ping -h 127.0.0.1 -uroot -p$MARIADB_ROOT_PASSWORD --silent"]
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 12
+          resources:
+            requests: { cpu: "200m", memory: "512Mi" }
+            limits: { cpu: "1500m", memory: "1536Mi" }
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/mysql
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: db-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: db
+  namespace: waffle
+spec:
+  selector:
+    app: db
+  ports:
+    - port: 3306
+      targetPort: 3306
