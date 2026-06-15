@@ -7,6 +7,7 @@ import { initEditor } from '@/components/workspace/editor'
 import loadpost from '@/components/workspace/loadpost'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useToastStore } from '@/stores/useToastStore'
+import { useDialog } from '@/composables/useDialog'
 import SockJS from 'sockjs-client'
 import Stomp from 'stompjs'
 import { apiPath } from '@/utils/backendUrl'
@@ -16,6 +17,7 @@ const route     = useRoute()
 const router    = useRouter()
 const authStore = useAuthStore()
 const toast     = useToastStore()
+const { confirm } = useDialog()
 
 const editorHolder    = ref(null)
 const editorApi       = ref(null)
@@ -318,7 +320,7 @@ const previewVersion = async (versionNum) => {
   try {
     versionPreview.value = await fetchPostVersion(workspaceId.value, versionNum)
   } catch {
-    alert('버전을 불러오지 못했습니다.')
+    toast.error('버전을 불러오지 못했습니다.')
   }
 }
 
@@ -371,13 +373,13 @@ const handleRoleAction = async (user, action) => {
 
   try {
     if (action === 'KICKED') {
-      if (!confirm(`${user.name} 님을 추방하시겠습니까?`)) return
+      if (!(await confirm({ title: '참여자 추방', message: `${user.name} 님을 추방하시겠습니까?`, confirmText: '추방', danger: true }))) return
       await postApi.kickUser(workspaceId.value, user.userIdx)
     } else {
       await postApi.changeUserRole(workspaceId.value, user.userIdx, action)
     }
   } catch (e) {
-    alert('권한 변경에 실패했습니다.')
+    toast.error('권한 변경에 실패했습니다.')
   }
 }
 
@@ -391,7 +393,7 @@ const handleSseRoleChanged = (evt) => {
   if (Number(postIdx) !== Number(workspaceId.value)) return
 
   if (newRole === 'KICKED') {
-    alert('해당 워크스페이스에서 추방되었습니다.')
+    toast.warning('해당 워크스페이스에서 추방되었습니다.')
     allowRouteLeaveOnce.value = true
     // 홈으로 강제 이동 + 사이드바 협업목록 갱신(추방된 워크스페이스 제거)
     router.push({ name: 'home' }).finally(() => { loadpost.side_list() })
@@ -449,7 +451,7 @@ const handleBeforeUnload = (event) => {
   return LEAVE_WARNING_MESSAGE
 }
 
-onBeforeRouteLeave(() => {
+onBeforeRouteLeave(async () => {
   if (allowRouteLeaveOnce.value) {
     allowRouteLeaveOnce.value = false
     return true
@@ -457,10 +459,10 @@ onBeforeRouteLeave(() => {
 
   if (!hasUnsavedChanges.value) return true
 
-  return window.confirm(LEAVE_WARNING_MESSAGE)
+  return await confirm({ title: '페이지 나가기', message: LEAVE_WARNING_MESSAGE, confirmText: '나가기', cancelText: '머무르기', danger: true })
 })
 
-onBeforeRouteUpdate(() => {
+onBeforeRouteUpdate(async () => {
   if (allowRouteLeaveOnce.value) {
     allowRouteLeaveOnce.value = false
     return true
@@ -468,7 +470,7 @@ onBeforeRouteUpdate(() => {
 
   if (!hasUnsavedChanges.value) return true
 
-  return window.confirm(LEAVE_WARNING_MESSAGE)
+  return await confirm({ title: '페이지 나가기', message: LEAVE_WARNING_MESSAGE, confirmText: '나가기', cancelText: '머무르기', danger: true })
 })
 
 watch(workspaceAssets, (assets) => {
@@ -599,7 +601,7 @@ const saveWorkspaceAssetToDrive = async (asset) => {
   workspaceAssetError.value     = ''
   try {
     await postApi.saveWorkspaceAssetToDrive(workspaceId.value, asset.id)
-    window.alert('파일이 드라이브에 저장되었습니다.')
+    toast.success('파일이 드라이브에 저장되었습니다.')
   } catch (error) {
     workspaceAssetError.value =
       error?.response?.data?.message || error?.message || '파일을 드라이브에 저장하지 못했습니다.'

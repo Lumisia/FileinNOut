@@ -23,6 +23,8 @@ import { registerPushNotification } from "@/utils/pushNotification";
 import ProfileModal from "./ProfileModal.vue";
 import GamesHubModal from "@/components/games/GamesHubModal.vue";
 import postApi from "@/api/postApi";
+import { useToastStore } from "@/stores/useToastStore";
+import { useDialog } from "@/composables/useDialog";
 
 const emit = defineEmits(["toggle-chat", "toggle-theme", "switch-view"]);
 
@@ -31,6 +33,8 @@ const route = useRoute();
 const authStore = useAuthStore();
 const fileStore = useFileStore();
 const headerSearchStore = useHeaderSearchStore();
+const toast = useToastStore();
+const { confirm } = useDialog();
 
 const showNotifDropdown = ref(false);
 const showProfileDropdown = ref(false);
@@ -388,11 +392,11 @@ const handleInviteVerify = async (notification, type) => {
     await fetchNotifications();
 
     if (type === "accept" && message.includes("유효하지 않은 토큰")) {
-      alert("이미 처리되었거나 만료된 초대입니다.");
+      toast.warning("이미 처리되었거나 만료된 초대입니다.");
       return;
     }
 
-    alert(message || (type === "accept" ? "초대 수락에 실패했습니다." : "초대 거절에 실패했습니다."));
+    toast.error(message || (type === "accept" ? "초대 수락에 실패했습니다." : "초대 거절에 실패했습니다."));
   }
 };
 
@@ -412,7 +416,7 @@ const handleGroupInviteAction = async (notification, type) => {
   } catch (error) {
     console.error(type === "accept" ? "그룹 초대 수락 실패:" : "그룹 초대 거절 실패:", error);
     await fetchNotifications();
-    alert(getErrorMessage(error) || (type === "accept" ? "그룹 초대 수락에 실패했습니다." : "그룹 초대 거절에 실패했습니다."));
+    toast.error(getErrorMessage(error) || (type === "accept" ? "그룹 초대 수락에 실패했습니다." : "그룹 초대 거절에 실패했습니다."));
   }
 };
 
@@ -432,7 +436,7 @@ const handleRelationshipInviteAction = async (notification, type) => {
   } catch (error) {
     console.error(type === "accept" ? "연결 초대 수락 실패:" : "연결 초대 거절 실패:", error);
     await fetchNotifications();
-    alert(getErrorMessage(error) || (type === "accept" ? "연결 초대 수락에 실패했습니다." : "연결 초대 거절에 실패했습니다."));
+    toast.error(getErrorMessage(error) || (type === "accept" ? "연결 초대 수락에 실패했습니다." : "연결 초대 거절에 실패했습니다."));
   }
 };
 
@@ -494,7 +498,7 @@ const handleDeleteNotification = async (notification) => {
     updateNotifBadge();
   } catch (error) {
     console.error("알림 삭제 실패:", error);
-    alert("알림 삭제에 실패했습니다.");
+    toast.error("알림 삭제에 실패했습니다.");
   }
 };
 
@@ -633,7 +637,7 @@ const handleSavedProfile = (savedProfile) => {
 };
 
 const handleLogout = async () => {
-  if (confirm("로그아웃 하시겠습니까?")) {
+  if (await confirm({ title: "로그아웃", message: "로그아웃 하시겠습니까?", confirmText: "로그아웃" })) {
     await authStore.logout();
     router.push("/login");
   }

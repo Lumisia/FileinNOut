@@ -6,11 +6,15 @@ import loadpost from '@/components/workspace/loadpost';
 import { useFileStore } from '@/stores/useFileStore';
 import { useAuthStore } from '@/stores/useAuthStore';
 import postApi from '@/api/postApi';
-import ShareModal from '@/views/workspace/ShareModal.vue'; 
+import { useToastStore } from '@/stores/useToastStore';
+import { useDialog } from '@/composables/useDialog';
+import ShareModal from '@/views/workspace/ShareModal.vue';
 import RoleModal from '@/views/workspace/RoleModal.vue';
 
 const authStore = useAuthStore()
 const fileStore = useFileStore()
+const toast = useToastStore()
+const { confirm } = useDialog()
 const isSidebarOpen = ref(true) // 사이드바 토글 상태
 const openMenuId = ref(null) // 현재 열려있는 메뉴의 ID 관리
 
@@ -179,21 +183,21 @@ const targetPostStatus = ref('Private');
 // 메뉴 액션 함수들
 const handleAction = async (action, idx) => {
   if (action === 'delete') {
-    if (confirm('정말로 이 페이지를 삭제하시겠습니까?')) {
+    if (await confirm({ title: '페이지 삭제', message: '정말로 이 페이지를 삭제하시겠습니까?', confirmText: '삭제', danger: true })) {
       await postApi.deletePost(idx); 
       await side_list(); 
       router.push({ name: 'home' });
     }
   } else if (action === 'listDelete') {
     // ✨ [추가] 목록 삭제 기능 (본인이 ADMIN이 아닐 때 리스트에서 제거)
-    if (confirm('이 페이지를 내 목록에서 삭제하시겠습니까?')) {
+    if (await confirm({ title: '목록에서 삭제', message: '이 페이지를 내 목록에서 삭제하시겠습니까?', confirmText: '삭제', danger: true })) {
       try {
         await postApi.list_delete(idx); // api.post(`/workspace/delete/list/${idx}`) 호출
         await side_list(); 
         router.push({ name: 'home' });
       } catch (error) {
         console.error(error);
-        alert('목록 삭제 중 오류가 발생했습니다.');
+        toast.error('목록 삭제 중 오류가 발생했습니다.');
       }
     }
   } else if (action === 'share') {
@@ -213,7 +217,7 @@ const handleAction = async (action, idx) => {
       isRoleModalOpen.value = true;
     } catch (error) {
       console.error('Role list fetch error:', error);
-      alert('권한 정보를 불러오는데 실패했습니다.');
+      toast.error('권한 정보를 불러오는데 실패했습니다.');
     }
   }
   openMenuId.value = null;
