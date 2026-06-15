@@ -5,9 +5,13 @@ import ChatList from './Chatlist.vue'
 import { useAuthStore } from '@/stores/useAuthStore'
 import api from '@/plugins/axiosinterceptor.js'
 import GroupChatInviteModal from '@/components/group/GroupChatInviteModal.vue'
+import { useToastStore } from '@/stores/useToastStore'
+import { useDialog } from '@/composables/useDialog'
 
 const props = defineProps({ isOpen: Boolean })
 const emit = defineEmits(['close'])
+const toast = useToastStore()
+const { confirm, prompt } = useDialog()
 
 // 너비 조절 상태
 const DEFAULT_WIDTH = 320;
@@ -36,14 +40,15 @@ const closeMenuOutside = (e) => {
 }
 // 메뉴에서 나가기 클릭 시
 const handleLeaveRoomFromMenu = async () => {
-  if (!selectedRoom.value || !confirm(`'${selectedRoom.value.name}' 방에서 나가시겠습니까?`)) return
+  if (!selectedRoom.value) return
+  if (!(await confirm({ title: '채팅방 나가기', message: `'${selectedRoom.value.name}' 방에서 나가시겠습니까?`, confirmText: '나가기', danger: true }))) return
   try {
     await api.delete(`/chatRoom/${selectedRoom.value.id}/exit`)
     isMenuOpen.value = false
     handleBack() // 목록으로 돌아가기
   } catch (error) {
     console.error('방 나가기 실패:', error)
-    alert('방 나가기에 실패했습니다.')
+    toast.error('방 나가기에 실패했습니다.')
   }
 }
 
@@ -248,7 +253,7 @@ const handleCreateRoom = () => {
 }
 
 const onRenameRoom = async (room) => {
-  const newTitle = prompt('변경할 방 이름을 입력하세요.', room.name);
+  const newTitle = await prompt({ title: '방 이름 변경', label: '새 방 이름', value: room.name, placeholder: '변경할 방 이름을 입력하세요.' });
   if (newTitle && newTitle.trim() !== room.name) {
     try {
       await api.patch(`/chatRoom/${room.id}/title`, { title: newTitle.trim() });
@@ -262,13 +267,13 @@ const onRenameRoom = async (room) => {
 }
 
 const onLeaveRoom = async (room) => {
-  if (!confirm(`'${room.name}' 방에서 나가시겠습니까?`)) return;
+  if (!(await confirm({ title: '채팅방 나가기', message: `'${room.name}' 방에서 나가시겠습니까?`, confirmText: '나가기', danger: true }))) return;
   try {
     await api.delete(`/chatRoom/${room.id}/exit`);
-    alert('방에서 나갔습니다.');
+    toast.success('방에서 나갔습니다.');
     await fetchRooms(true);
   } catch (error) {
-    alert('방 나가기에 실패했습니다.');
+    toast.error('방 나가기에 실패했습니다.');
   }
 }
 

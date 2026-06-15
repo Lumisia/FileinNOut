@@ -177,9 +177,11 @@
 <script setup>
 import { ref, reactive, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useToastStore } from '@/stores/useToastStore'
 
 const route = useRoute()
 const router = useRouter()
+const toast = useToastStore()
 
 const agreements = ref(false)
 
@@ -210,8 +212,7 @@ const handlePayment = () => {
 
   const price = route.query.price || '0.00'
   
-  // 브라우저 팝업은 사용자 경험에 좋지 않으나, 요구사항 유지를 위해 남겨둠
-  alert(`$${price} 결제가 성공적으로 완료되었습니다! 메인 화면으로 이동합니다.`)
+  toast.success(`$${price} 결제가 성공적으로 완료되었습니다! 메인 화면으로 이동합니다.`)
 
   router.push('/main')
 }
