@@ -20,6 +20,11 @@ import java.time.LocalDateTime;
 @Service
 @RequiredArgsConstructor
 public class AuthService {
+    // 토큰 유효기간
+    private static final long ACCESS_TOKEN_TTL_MS  = 3_600_000L;       // 1시간 (기존 10분 → 연장)
+    private static final long REFRESH_TOKEN_TTL_MS = 1_209_600_000L;   // 14일
+    private static final int  REFRESH_TOKEN_TTL_DAYS = 14;
+
     private final JwtUtil jwtUtil;
     private final RefreshTokenRepository refreshTokenRepository;
     private final UserRepository userRepository;
@@ -27,9 +32,9 @@ public class AuthService {
     @Transactional
     public TokenDto.AuthTokenResponse issueTokens(Long userIdx, String userId, String email, String name, String role) {
         String resolvedUserId = (userId == null || userId.isBlank()) ? email : userId;
-        String access = jwtUtil.createToken("access", userIdx, resolvedUserId, email, name, role, 600000L);
-        String refresh = jwtUtil.createToken("refresh", userIdx, resolvedUserId, email, name, role, 1209600000L);
-        LocalDateTime expiryDate = LocalDateTime.now().plusDays(14);
+        String access = jwtUtil.createToken("access", userIdx, resolvedUserId, email, name, role, ACCESS_TOKEN_TTL_MS);
+        String refresh = jwtUtil.createToken("refresh", userIdx, resolvedUserId, email, name, role, REFRESH_TOKEN_TTL_MS);
+        LocalDateTime expiryDate = LocalDateTime.now().plusDays(REFRESH_TOKEN_TTL_DAYS);
 
         // 2. DB 영속성 관리 (Upsert: 존재하면 갱신, 없으면 삽입)
         refreshTokenRepository.findByEmail(email)
@@ -92,7 +97,7 @@ public class AuthService {
                 user.getEmail(),
                 user.getName(),
                 user.getRole(),
-                600000L
+                ACCESS_TOKEN_TTL_MS
         );
         String newRefresh = jwtUtil.createToken(
                 "refresh",
@@ -101,10 +106,10 @@ public class AuthService {
                 user.getEmail(),
                 user.getName(),
                 user.getRole(),
-                1209600000L
+                REFRESH_TOKEN_TTL_MS
         );
 
-        dbToken.updateToken(newRefresh, LocalDateTime.now().plusDays(14));
+        dbToken.updateToken(newRefresh, LocalDateTime.now().plusDays(REFRESH_TOKEN_TTL_DAYS));
 
         return new TokenDto.AuthTokenResponse(newAccess, newRefresh);
     }
