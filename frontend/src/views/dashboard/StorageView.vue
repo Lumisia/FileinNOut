@@ -207,7 +207,7 @@ onMounted(() => {
             v-else
             class="rounded-2xl border border-dashed border-gray-200 bg-slate-50 px-4 py-10 text-center text-sm text-gray-500"
           >
-            집계할 활성 파일이 없습니다.
+            아직 업로드한 파일이 없어 집계할 사용량이 없습니다.
           </div>
         </section>
 
@@ -271,7 +271,7 @@ onMounted(() => {
           v-else
           class="rounded-2xl border border-dashed border-gray-200 bg-slate-50 px-4 py-10 text-center text-sm text-gray-500"
         >
-          집계할 활성 파일이 없습니다.
+          표시할 파일이 없습니다. 파일을 업로드하면 여기에 집계됩니다.
         </div>
       </section>
     </template>

@@ -311,6 +311,12 @@ function closeDropdown() {
   isDropdownOpen.value = false;
 }
 
+// 빈 화면 등 외부 CTA 가 업로드 패널을 열도록 요청할 때(window 이벤트).
+function handleOpenUploadRequest() {
+  isPanelHidden.value = false;
+  isDropdownOpen.value = true;
+}
+
 function togglePanelCollapsed() {
   isPanelCollapsed.value = !isPanelCollapsed.value;
 }
@@ -1004,6 +1010,7 @@ onMounted(() => {
   document.addEventListener("keydown", handleKeydown);
   window.addEventListener("beforeunload", handleBeforeUnload);
   window.addEventListener("pagehide", handlePageHide);
+  window.addEventListener("open-file-upload", handleOpenUploadRequest);
   fileStore.fetchStorageSummary().catch((error) => {
     console.error("Upload widget storage summary fetch failed:", error);
   });
@@ -1013,6 +1020,7 @@ onBeforeUnmount(() => {
   document.removeEventListener("keydown", handleKeydown);
   window.removeEventListener("beforeunload", handleBeforeUnload);
   window.removeEventListener("pagehide", handlePageHide);
+  window.removeEventListener("open-file-upload", handleOpenUploadRequest);
   activeUploadControllers.forEach((controller) => controller.abort());
   activeUploadControllers.clear();
   if (exitDialogResolver) {

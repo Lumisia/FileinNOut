@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import FilePreviewModal from "@/components/FilePreviewModal.vue";
 import FileCollectionView from "@/components/file/FileCollectionView.vue";
+import EmptyState from "@/components/feedback/EmptyState.vue";
 import { downloadFileAsset } from "@/api/filesApi.js";
 import { fetchGroupOverview, shareFilesWithTargets } from "@/api/groupApi";
 import { useFileStore } from "@/stores/useFileStore";
@@ -26,9 +27,13 @@ const props = defineProps({
   deleteMode: { type: String, default: "trash" },
   showFolderNavigation: { type: Boolean, default: false },
   sharedLibrary: { type: Boolean, default: false },
+  emptyIcon: { type: String, default: "fa-regular fa-folder-open" },
+  emptyTitle: { type: String, default: "표시할 파일이 없습니다" },
+  emptyDescription: { type: String, default: "" },
+  emptyActionLabel: { type: String, default: "" },
 });
 
-const emit = defineEmits(["delete"]);
+const emit = defineEmits(["delete", "empty-action"]);
 
 const fileStore = useFileStore();
 const toast = useToastStore();
@@ -1089,7 +1094,24 @@ onMounted(() => {
         </div>
       </div>
 
-      <div v-else-if="!fileStore.loadError && showEmpty" class="rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-14 text-center text-sm text-gray-400">{{ "\uD45C\uC2DC\uD560 \uD30C\uC77C\uC774 \uC5C6\uC2B5\uB2C8\uB2E4." }}</div>
+      <div v-else-if="!fileStore.loadError && showEmpty" class="py-2">
+      <EmptyState
+        v-if="hasActiveFilters"
+        icon="fa-solid fa-filter-circle-xmark"
+        title="\uAC80\uC0C9 \uACB0\uACFC\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4"
+        description="\uD604\uC7AC \uAC80\uC0C9\uC5B4\uB098 \uD544\uD130\uC5D0 \uB9DE\uB294 \uD30C\uC77C\uC774 \uC5C6\uC5B4\uC694. \uC870\uAC74\uC744 \uBC14\uAFB8\uAC70\uB098 \uCD08\uAE30\uD654\uD574 \uBCF4\uC138\uC694."
+      >
+        <button type="button" class="empty-cta" @click="resetFilters">{{ resetFiltersLabel }}</button>
+      </EmptyState>
+      <EmptyState
+        v-else
+        :icon="emptyIcon"
+        :title="emptyTitle"
+        :description="emptyDescription"
+      >
+        <button v-if="emptyActionLabel" type="button" class="empty-cta" @click="emit('empty-action')">{{ emptyActionLabel }}</button>
+      </EmptyState>
+    </div>
     </template>
 
     <div v-if="renameTarget" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 px-4" @click.self="closeRenameModal">
@@ -1357,6 +1379,8 @@ onMounted(() => {
 .toolbar-chip { display: inline-flex; align-items: center; border-radius: 999px; background: var(--bg-input); padding: 0.5rem 0.8rem; font-size: 0.78rem; font-weight: 700; color: var(--text-secondary); border: 1px solid color-mix(in srgb, var(--border-color) 84%, transparent); }
 .toolbar-chip--accent { background: var(--accent-soft); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 24%, transparent); }
 .toolbar-reset { border-radius: 999px; background: color-mix(in srgb, var(--accent) 12%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 26%, transparent); padding: 0.5rem 0.9rem; font-size: 0.78rem; font-weight: 800; color: var(--accent); transition: background-color 0.18s ease, border-color 0.18s ease; white-space: nowrap; }
+.empty-cta { display: inline-flex; align-items: center; gap: 0.4rem; border-radius: 999px; background: var(--accent, #2563eb); border: 1px solid transparent; padding: 0.6rem 1.15rem; font-size: 0.84rem; font-weight: 800; color: #fff; cursor: pointer; transition: filter 0.18s ease; }
+.empty-cta:hover { filter: brightness(1.05); }
 .toolbar-reset:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); border-color: color-mix(in srgb, var(--accent) 36%, transparent); }
 .toolbar-folder-panel { display: grid; gap: 0.85rem; border-radius: 1.3rem; border: 1px solid color-mix(in srgb, var(--border-color) 88%, transparent); background: color-mix(in srgb, var(--bg-elevated) 90%, var(--bg-input) 10%); padding: 1rem 1.05rem; }
 .toolbar-folder-panel__header { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 0.85rem; }

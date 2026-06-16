@@ -24,6 +24,9 @@ const handleClearTrash = async () => {
     :show-empty="true"
     delete-mode="permanent"
     :show-folder-navigation="false"
+    empty-icon="fa-regular fa-trash-can"
+    empty-title="휴지통이 비었습니다"
+    empty-description="삭제한 파일이 여기에 표시됩니다. 영구 삭제하면 복구할 수 없어요."
     @delete="handlePermanentDelete"
   >
     <template #header-right>
