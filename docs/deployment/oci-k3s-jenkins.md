@@ -12,6 +12,7 @@ high-availability features that do not fit the budget.
 - Deployment: Helm upgrade with standard Kubernetes Deployments
 - Rollout behavior: Kubernetes rolling update
 - StorageClass: `local-path`
+- App runtime services: frontend, backend, websocket, MariaDB, Redis, MinIO
 - Disabled for this profile: Argo Rollouts, Longhorn, Redis Sentinel, HPA
 
 ## Jenkins Flow
@@ -54,6 +55,10 @@ The Jenkins agent must have:
 
 On the OCI node, call out before installing Jenkins or wiring the kubeconfig.
 That is the point where cloud access is required.
+
+Install k3s with Traefik disabled and include `host.docker.internal` in the API
+server TLS SANs. Jenkins runs in Docker, so its kubeconfig should point at
+`https://host.docker.internal:6443` instead of `https://127.0.0.1:6443`.
 
 The reproducible Jenkins controller profile lives in `cicd/jenkins`:
 
@@ -163,3 +168,8 @@ helm upgrade --install fileinnout ./cicd/helm \
 The profile is intentionally small. Jenkins builds should run with concurrency
 set to 1. Do not run heavy load tests, Argo Rollouts, Longhorn, and Jenkins
 Docker builds concurrently on the same 4 OCPU node.
+
+MinIO is deployed inside the app namespace for the portfolio profile because
+the backend defaults to the `minio` storage provider. Keep the MinIO service
+internal; expose only the frontend, API, Swagger, Jenkins, Kiali, and Jaeger
+domains.

@@ -20,6 +20,8 @@ test('observability profile contains lightweight Prometheus settings', () => {
   assert.match(values, /storageClass:\s*"local-path"/)
   assert.match(values, /size:\s*4Gi/)
   assert.match(values, /requests:[\s\S]*cpu:\s*"200m"[\s\S]*memory:\s*"512Mi"/)
+  assert.doesNotMatch(values, /serverFiles:/)
+  assert.doesNotMatch(values, /job_name:\s*prometheus/)
 })
 
 test('Kiali operator values point at Prometheus and Jaeger with small resources', () => {
@@ -70,6 +72,8 @@ test('Istio telemetry manifest and docs wire traces to Jaeger without sidecar mo
   assert.match(telemetry, /kind:\s*Telemetry/)
   assert.match(telemetry, /providers:[\s\S]*name:\s*jaeger/)
   assert.match(readme, /profile=ambient/)
+  assert.match(readme, /values\.cni\.cniBinDir=\/var\/lib\/rancher\/k3s\/data\/cni/)
+  assert.match(readme, /values\.cni\.cniConfDir=\/var\/lib\/rancher\/k3s\/agent\/etc\/cni\/net\.d/)
   assert.match(readme, /extensionProviders\[0\]\.opentelemetry\.service=jaeger-collector\.observability\.svc\.cluster\.local/)
   assert.match(readme, /kubectl label namespace fileinnout istio\.io\/dataplane-mode=ambient --overwrite/)
   assert.match(readme, /Do not expose Kiali or Jaeger publicly without Cloudflare Access/)

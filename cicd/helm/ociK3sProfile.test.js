@@ -47,6 +47,40 @@ test('OCI k3s values profile uses single-node friendly resources and domains', (
   assert.match(values, /hosts:[\s\S]*frontend:[\s\S]*api:[\s\S]*swagger:/)
 })
 
+test('OCI k3s chart deploys MinIO for the minio storage provider', () => {
+  const baseValues = readRepoFile('cicd/helm/values.yaml')
+  const ociValues = readRepoFile('cicd/helm/values-oci-k3s.yaml')
+  const minioTemplatePath = resolve(repoRoot, 'cicd/helm/templates/minio-statefulset.yaml')
+
+  assert.match(baseValues, /minio:[\s\S]*enabled:\s*true/)
+  assert.match(baseValues, /service:[\s\S]*name:\s*minio[\s\S]*apiPort:\s*9000/)
+  assert.match(ociValues, /minio:[\s\S]*storageClassName:\s*local-path/)
+  assert.match(ociValues, /minio:[\s\S]*size:\s*4Gi/)
+  assert.equal(existsSync(minioTemplatePath), true, 'MinIO StatefulSet template should exist')
+
+  const source = readFileSync(minioTemplatePath, 'utf8')
+  assert.match(source, /kind:\s*Service/)
+  assert.match(source, /kind:\s*StatefulSet/)
+  assert.match(source, /name:\s*MINIO_ROOT_USER/)
+  assert.match(source, /name:\s*MINIO_ROOT_PASSWORD/)
+  assert.match(source, /server[\s\S]*\/data[\s\S]*--console-address/)
+  assert.match(source, /httpGet:[\s\S]*\/minio\/health\/ready/)
+  assert.match(source, /minio-data/)
+  assert.match(source, /wafflebear\.workerScheduling/)
+})
+
+test('environment ConfigMaps render every value as a Kubernetes string', () => {
+  for (const [file, valuesPath] of [
+    ['cicd/helm/templates/backend-configmap.yaml', 'backend'],
+    ['cicd/helm/templates/websocket-server-configmap.yaml', 'websocket'],
+  ]) {
+    const source = readRepoFile(file)
+    assert.doesNotMatch(source, /tpl \(toYaml \.Values\.[^)]+\.env\)/)
+    assert.match(source, new RegExp(`range \\$key, \\$value := \\.Values\\.${valuesPath}\\.env`))
+    assert.match(source, /tpl \(toString \$value\) \$ \| quote/)
+  }
+})
+
 test('Helm templates can render standard Deployments without Argo Rollouts', () => {
   for (const file of [
     'cicd/helm/templates/backend-deployment.yaml',

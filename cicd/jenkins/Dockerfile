@@ -24,13 +24,25 @@ RUN apt-get update \
       docker-compose-plugin \
     && rm -rf /var/lib/apt/lists/*
 
-RUN curl -fsSL -o /usr/local/bin/kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" \
+RUN arch="$(dpkg --print-architecture)" \
+    && case "$arch" in \
+      amd64) tool_arch="amd64" ;; \
+      arm64) tool_arch="arm64" ;; \
+      *) echo "Unsupported architecture: $arch" >&2; exit 1 ;; \
+    esac \
+    && curl -fsSL -o /usr/local/bin/kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${tool_arch}/kubectl" \
     && chmod +x /usr/local/bin/kubectl
 
-RUN curl -fsSL -o /tmp/helm.tar.gz "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz" \
+RUN arch="$(dpkg --print-architecture)" \
+    && case "$arch" in \
+      amd64) tool_arch="amd64" ;; \
+      arm64) tool_arch="arm64" ;; \
+      *) echo "Unsupported architecture: $arch" >&2; exit 1 ;; \
+    esac \
+    && curl -fsSL -o /tmp/helm.tar.gz "https://get.helm.sh/helm-${HELM_VERSION}-linux-${tool_arch}.tar.gz" \
     && tar -C /tmp -xzf /tmp/helm.tar.gz \
-    && install -m 0755 /tmp/linux-amd64/helm /usr/local/bin/helm \
-    && rm -rf /tmp/helm.tar.gz /tmp/linux-amd64
+    && install -m 0755 "/tmp/linux-${tool_arch}/helm" /usr/local/bin/helm \
+    && rm -rf /tmp/helm.tar.gz "/tmp/linux-${tool_arch}"
 
 COPY cicd/jenkins/plugins.txt /usr/share/jenkins/ref/plugins.txt
 RUN jenkins-plugin-cli --plugin-file /usr/share/jenkins/ref/plugins.txt
