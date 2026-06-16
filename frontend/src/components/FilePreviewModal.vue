@@ -1,7 +1,9 @@
 <script setup>
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { useFileStore } from "@/stores/useFileStore";
 import { downloadFileAsset } from "@/api/filesApi.js";
+import { useToastStore } from "@/stores/useToastStore";
+import { useFocusTrap } from "@/composables/useFocusTrap";
 
 const props = defineProps({
   file: {
@@ -12,6 +14,10 @@ const props = defineProps({
 
 const emit = defineEmits(["close"]);
 const fileStore = useFileStore();
+const toast = useToastStore();
+
+const panelRef = ref(null);
+useFocusTrap(() => Boolean(props.file), panelRef, { onEsc: () => emit("close") });
 const textPreview = ref(null);
 const textPreviewError = ref("");
 const isTextPreviewLoading = ref(false);
@@ -46,7 +52,7 @@ const handleDownload = async () => {
     isDownloading.value = true;
     await downloadFileAsset(props.file);
   } catch (error) {
-    window.alert(error?.message || "\uD30C\uC77C\uC744 \uB2E4\uC6B4\uB85C\uB4DC\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.");
+    toast.error(error?.message || "\uD30C\uC77C\uC744 \uB2E4\uC6B4\uB85C\uB4DC\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.");
   } finally {
     isDownloading.value = false;
   }
@@ -120,12 +126,6 @@ const locationLabel = computed(() => {
   return ["홈", ...parentPath].join(" / ");
 });
 
-const closeOnEscape = (event) => {
-  if (event.key === "Escape") {
-    emit("close");
-  }
-};
-
 const loadTextPreview = async () => {
   if (!props.file?.id || previewKind.value !== "text") {
     textPreview.value = null;
@@ -155,24 +155,23 @@ const loadTextPreview = async () => {
 
 watch(
   () => props.file,
-  (file) => {
-    window.removeEventListener("keydown", closeOnEscape);
-    if (file) {
-      window.addEventListener("keydown", closeOnEscape);
-    }
+  () => {
     loadTextPreview();
   },
   { immediate: true },
 );
-
-onBeforeUnmount(() => {
-  window.removeEventListener("keydown", closeOnEscape);
-});
 </script>
 
 <template>
   <div v-if="file" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/55 px-4" @click.self="emit('close')">
-    <div class="flex h-[min(88vh,760px)] w-full max-w-6xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl lg:flex-row">
+    <div
+      ref="panelRef"
+      class="flex h-[min(88vh,760px)] w-full max-w-6xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl lg:flex-row"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="file-preview-title"
+      tabindex="-1"
+    >
       <section class="flex min-h-[320px] flex-1 items-center justify-center bg-slate-950/95 p-4">
         <div v-if="isLockedFile" class="flex h-full w-full flex-col items-center justify-center gap-3 rounded-3xl border border-amber-400/30 bg-amber-100/5 px-6 text-center text-amber-100">
           <div class="flex h-16 w-16 items-center justify-center rounded-full bg-amber-400/20">
@@ -205,7 +204,7 @@ onBeforeUnmount(() => {
         <div class="flex items-start justify-between gap-3 border-b border-gray-200 px-6 py-5">
           <div class="min-w-0">
             <p class="text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">파일 정보</p>
-            <h3 class="mt-2 truncate text-xl font-bold text-gray-900">{{ file.name }}</h3>
+            <h3 id="file-preview-title" class="mt-2 truncate text-xl font-bold text-gray-900">{{ file.name }}</h3>
             <p class="mt-2 text-sm text-gray-500">{{ locationLabel }}</p>
             <div class="mt-3 flex flex-wrap gap-2">
               <span

@@ -6,11 +6,15 @@ import loadpost from '@/components/workspace/loadpost';
 import { useFileStore } from '@/stores/useFileStore';
 import { useAuthStore } from '@/stores/useAuthStore';
 import postApi from '@/api/postApi';
-import ShareModal from '@/views/workspace/ShareModal.vue'; 
+import { useToastStore } from '@/stores/useToastStore';
+import { useDialog } from '@/composables/useDialog';
+import ShareModal from '@/views/workspace/ShareModal.vue';
 import RoleModal from '@/views/workspace/RoleModal.vue';
 
 const authStore = useAuthStore()
 const fileStore = useFileStore()
+const toast = useToastStore()
+const { confirm } = useDialog()
 const isSidebarOpen = ref(true) // 사이드바 토글 상태
 const openMenuId = ref(null) // 현재 열려있는 메뉴의 ID 관리
 
@@ -31,8 +35,6 @@ const {
   isSharedOpen, 
   side_list 
 } = loadpost;
-
-let sideListTimer = null;
 
 const scrollToTop = () => {
   window.scrollTo({
@@ -85,20 +87,11 @@ const closeMenu = () => {
 
 onMounted(() => {
   side_list();
-  fileStore.fetchStorageSummary().catch(() => {})
   window.addEventListener('sse-title-updated', handleSseTitleUpdated)
   window.addEventListener('click', closeMenu);
-
-  // sideListTimer = setInterval(() => {
-  //   console.log('실시간 리스트 갱신 중...');
-  //   side_list();
-  // }, 30000);
 })
 
 onBeforeUnmount(() => {
-  if (sideListTimer) {
-    clearInterval(sideListTimer);
-  }
   window.removeEventListener('sse-title-updated', handleSseTitleUpdated)
   window.removeEventListener('click', closeMenu);
 })
@@ -107,37 +100,6 @@ onBeforeUnmount(() => {
 const toggleSidebar = () => {
   isSidebarOpen.value = !isSidebarOpen.value
 }
-
-const formatBytes = (bytes) => {
-  const size = Number(bytes || 0)
-  if (!Number.isFinite(size) || size <= 0) {
-    return '0 B'
-  }
-
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  const unitIndex = Math.min(
-    Math.floor(Math.log(size) / Math.log(1024)),
-    units.length - 1,
-  )
-  const value = size / 1024 ** unitIndex
-  const fractionDigits = unitIndex === 0 ? 0 : value >= 100 ? 0 : value >= 10 ? 1 : 2
-
-  return `${value.toFixed(fractionDigits)} ${units[unitIndex]}`
-}
-
-const storageSummary = computed(() => fileStore.storageSummary)
-
-const storageUsageWidth = computed(() => {
-  return `${Math.min(100, Math.max(0, Number(storageSummary.value?.usagePercent || 0)))}%`
-})
-
-const storageUsageText = computed(() => {
-  if (!storageSummary.value) {
-    return '저장 공간 통계 불러오는 중'
-  }
-
-  return `${formatBytes(storageSummary.value.usedBytes)} / ${formatBytes(storageSummary.value.quotaBytes)} 사용`
-})
 
 const isAdministrator = computed(() => {
   const email = String(authStore.user?.email || '').toLowerCase()
@@ -179,21 +141,21 @@ const targetPostStatus = ref('Private');
 // 메뉴 액션 함수들
 const handleAction = async (action, idx) => {
   if (action === 'delete') {
-    if (confirm('정말로 이 페이지를 삭제하시겠습니까?')) {
+    if (await confirm({ title: '페이지 삭제', message: '정말로 이 페이지를 삭제하시겠습니까?', confirmText: '삭제', danger: true })) {
       await postApi.deletePost(idx); 
       await side_list(); 
       router.push({ name: 'home' });
     }
   } else if (action === 'listDelete') {
     // ✨ [추가] 목록 삭제 기능 (본인이 ADMIN이 아닐 때 리스트에서 제거)
-    if (confirm('이 페이지를 내 목록에서 삭제하시겠습니까?')) {
+    if (await confirm({ title: '목록에서 삭제', message: '이 페이지를 내 목록에서 삭제하시겠습니까?', confirmText: '삭제', danger: true })) {
       try {
         await postApi.list_delete(idx); // api.post(`/workspace/delete/list/${idx}`) 호출
         await side_list(); 
         router.push({ name: 'home' });
       } catch (error) {
         console.error(error);
-        alert('목록 삭제 중 오류가 발생했습니다.');
+        toast.error('목록 삭제 중 오류가 발생했습니다.');
       }
     }
   } else if (action === 'share') {
@@ -213,7 +175,7 @@ const handleAction = async (action, idx) => {
       isRoleModalOpen.value = true;
     } catch (error) {
       console.error('Role list fetch error:', error);
-      alert('권한 정보를 불러오는데 실패했습니다.');
+      toast.error('권한 정보를 불러오는데 실패했습니다.');
     }
   }
   openMenuId.value = null;
@@ -270,16 +232,6 @@ const handleAction = async (action, idx) => {
             </RouterLink>
 
             <RouterLink
-              v-if="false"
-              :to="{ name: 'drive' }"
-              class="w-full flex items-center gap-3.5 px-3 py-2.5 text-sm text-[var(--text-secondary)] rounded-xl transition-all duration-200 hover:bg-[var(--bg-input)] hover:text-[var(--text-main)] no-underline"
-              active-class="!bg-blue-500/10 !text-blue-600 !font-bold dark:!bg-blue-400/20 dark:!text-blue-400"
-            >
-              <i class="fa-brands fa-google-drive w-5 text-center flex-shrink-0 text-lg"></i>
-              <span>홈</span>
-            </RouterLink>
-
-            <RouterLink
               :to="{ name: 'shareFile' }"
               class="w-full flex items-center gap-3.5 px-3 py-2.5 text-sm text-[var(--text-secondary)] rounded-xl transition-all duration-200 hover:bg-[var(--bg-input)] hover:text-[var(--text-main)] no-underline"
               active-class="!bg-blue-500/10 !text-blue-600 !font-bold dark:!bg-blue-400/20 dark:!text-blue-400"
@@ -301,27 +253,32 @@ const handleAction = async (action, idx) => {
           <div class="border-t border-[var(--border-color)] my-4 mx-2"></div>
 
           <div>
-            <div @click="isPersonalOpen = !isPersonalOpen" class="flex items-center justify-between px-4 py-2 cursor-pointer rounded-lg transition-colors duration-200 hover:bg-[var(--bg-input)] group">
-              <h3 class="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">개인 페이지</h3>
-              <div class="flex items-center gap-2">
-                <RouterLink :to="{ name: 'workspace' }" @click.stop>
-                  <button class="p-1 rounded hover:bg-gray-200 text-[var(--text-muted)] hover:text-blue-500 transition-colors">
-                    <i class="fa-solid fa-plus text-[10px]"></i>
-                  </button>
-                </RouterLink>
-                <span class="text-xs text-[var(--text-muted)] transition-transform duration-200" :class="{ 'rotate-180': !isPersonalOpen }">▼</span>
-              </div>
+            <div class="flex items-center justify-between px-4 py-2 rounded-lg transition-colors duration-200 hover:bg-[var(--bg-input)] group">
+              <button
+                type="button"
+                @click="isPersonalOpen = !isPersonalOpen"
+                :aria-expanded="isPersonalOpen"
+                class="flex flex-1 min-w-0 items-center justify-between gap-2 text-left cursor-pointer"
+              >
+                <h3 class="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">개인 페이지</h3>
+                <span class="text-xs text-[var(--text-muted)] transition-transform duration-200" aria-hidden="true" :class="{ 'rotate-180': !isPersonalOpen }">▼</span>
+              </button>
+              <RouterLink :to="{ name: 'workspace' }" @click.stop class="ml-2 shrink-0">
+                <button type="button" aria-label="새 워크스페이스 만들기" class="p-1 rounded hover:bg-gray-200 text-[var(--text-muted)] hover:text-blue-500 transition-colors">
+                  <i class="fa-solid fa-plus text-[10px]" aria-hidden="true"></i>
+                </button>
+              </RouterLink>
             </div>
 
             <div v-show="isPersonalOpen" class="mt-1 space-y-1 px-2">
               <template v-if="personalItems.length > 0">
-                <div v-for="item in personalItems" :key="item.post_idx" @click="goToPost(item.post_idx)" class="group relative px-3 py-2 text-sm text-[var(--text-secondary)] rounded-xl cursor-pointer flex items-center justify-between transition-all duration-200 hover:bg-[var(--bg-input)] hover:text-[var(--text-main)]">
-                  <div class="flex items-center gap-3 overflow-hidden">
-                    <i class="fa-solid fa-file-lines w-4 text-center opacity-70 flex-shrink-0"></i>
+                <div v-for="item in personalItems" :key="item.post_idx" class="group relative px-3 py-2 text-sm text-[var(--text-secondary)] rounded-xl flex items-center justify-between transition-all duration-200 hover:bg-[var(--bg-input)] hover:text-[var(--text-main)]">
+                  <button type="button" @click="goToPost(item.post_idx)" class="flex flex-1 min-w-0 items-center gap-3 overflow-hidden text-left cursor-pointer">
+                    <i class="fa-solid fa-file-lines w-4 text-center opacity-70 flex-shrink-0" aria-hidden="true"></i>
                     <span class="truncate">{{ item.title }}</span>
-                  </div>
-                  <button @click="toggleMenu($event, item.post_idx)" class="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-all">
-                    <i class="fa-solid fa-ellipsis text-xs"></i>
+                  </button>
+                  <button type="button" @click="toggleMenu($event, item.post_idx)" :aria-label="`${item.title} 더보기`" aria-haspopup="true" :aria-expanded="openMenuId === item.post_idx" class="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-all">
+                    <i class="fa-solid fa-ellipsis text-xs" aria-hidden="true"></i>
                   </button>
                   <div v-if="openMenuId === item.post_idx" class="absolute right-2 top-10 w-32 bg-[var(--bg-main)] border border-[var(--border-color)] rounded-lg shadow-xl z-[110] py-1 overflow-hidden">
                     <button v-if="item.level === 'ADMIN'" @click.stop="handleAction('share', item.post_idx)" class="w-full text-left px-4 py-2 text-xs hover:bg-[var(--bg-input)] transition-colors flex items-center gap-2">
@@ -342,24 +299,29 @@ const handleAction = async (action, idx) => {
                   </div>
                 </div>
               </template>
-              <div v-else class="px-3 py-4 text-xs text-[var(--text-muted)] italic text-center border border-dashed border-gray-200 rounded-lg mx-2">생성된 페이지가 없습니다.</div>
+              <div v-else class="px-3 py-4 text-xs text-[var(--text-muted)] italic text-center border border-dashed border-gray-200 rounded-lg mx-2">아직 페이지가 없어요. 위 + 버튼으로 새 워크스페이스를 만들어 보세요.</div>
             </div>
           </div>
 
           <div>
-            <div @click="isSharedOpen = !isSharedOpen" class="flex items-center justify-between px-4 py-2 cursor-pointer rounded-lg transition-colors duration-200 hover:bg-[var(--bg-input)]">
+            <button
+              type="button"
+              @click="isSharedOpen = !isSharedOpen"
+              :aria-expanded="isSharedOpen"
+              class="w-full flex items-center justify-between px-4 py-2 cursor-pointer rounded-lg transition-colors duration-200 hover:bg-[var(--bg-input)] text-left"
+            >
               <h3 class="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">협업 페이지</h3>
-              <span class="text-xs text-[var(--text-muted)] transition-transform duration-200" :class="{ 'rotate-180': !isSharedOpen }">▼</span>
-            </div>
+              <span class="text-xs text-[var(--text-muted)] transition-transform duration-200" aria-hidden="true" :class="{ 'rotate-180': !isSharedOpen }">▼</span>
+            </button>
             <div v-show="isSharedOpen" class="mt-1 space-y-1 px-2">
               <template v-if="sharedItems.length > 0">
-                <div v-for="team in sharedItems" :key="team.post_idx" @click="goToPost(team.post_idx)" class="group relative px-3 py-2 text-sm text-[var(--text-secondary)] rounded-xl cursor-pointer flex items-center justify-between transition-all duration-200 hover:bg-[var(--bg-input)] hover:text-[var(--text-main)]">
-                  <div class="flex items-center gap-3 overflow-hidden">
-                    <i class="fa-solid fa-file-lines w-4 text-center opacity-70 flex-shrink-0"></i>
+                <div v-for="team in sharedItems" :key="team.post_idx" class="group relative px-3 py-2 text-sm text-[var(--text-secondary)] rounded-xl flex items-center justify-between transition-all duration-200 hover:bg-[var(--bg-input)] hover:text-[var(--text-main)]">
+                  <button type="button" @click="goToPost(team.post_idx)" class="flex flex-1 min-w-0 items-center gap-3 overflow-hidden text-left cursor-pointer">
+                    <i class="fa-solid fa-file-lines w-4 text-center opacity-70 flex-shrink-0" aria-hidden="true"></i>
                     <span class="truncate">{{ team.title }}</span>
-                  </div>
-                  <button @click="toggleMenu($event, team.post_idx)" class="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-all">
-                    <i class="fa-solid fa-ellipsis text-xs"></i>
+                  </button>
+                  <button type="button" @click="toggleMenu($event, team.post_idx)" :aria-label="`${team.title} 더보기`" aria-haspopup="true" :aria-expanded="openMenuId === team.post_idx" class="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-all">
+                    <i class="fa-solid fa-ellipsis text-xs" aria-hidden="true"></i>
                   </button>
                   <div v-if="openMenuId === team.post_idx" class="absolute right-2 top-10 w-32 bg-[var(--bg-main)] border border-[var(--border-color)] rounded-lg shadow-xl z-[110] py-1 overflow-hidden">
                     <button v-if="team.level === 'ADMIN'" @click.stop="handleAction('share', team.post_idx)" class="w-full text-left px-4 py-2 text-xs hover:bg-[var(--bg-input)] transition-colors flex items-center gap-2">
@@ -380,28 +342,25 @@ const handleAction = async (action, idx) => {
                   </div>
                 </div>
               </template>
-              <div v-else class="px-3 py-4 text-xs text-[var(--text-muted)] italic text-center border border-dashed border-gray-200 rounded-lg mx-2">생성된 페이지가 없습니다.</div>
+              <div v-else class="px-3 py-4 text-xs text-[var(--text-muted)] italic text-center border border-dashed border-gray-200 rounded-lg mx-2">초대받은 협업 문서가 여기에 표시됩니다.</div>
             </div>
           </div>
-          
+
           <div class="border-t border-[var(--border-color)] my-4 mx-2"></div>
           
-          <RouterLink :to="{ name: 'trash' }" class="w-full flex items-center gap-3.5 px-3 py-2.5 text-sm text-[var(--text-secondary)] rounded-xl transition-all duration-200 hover:bg-[var(--bg-input)] hover:text-[var(--text-main)] no-underline">
-            <i class="fa-solid fa-trash w-5 text-center flex-shrink-0 text-lg"></i>
-            <span>휴지통</span>
-          </RouterLink>
-
-          <div class="p-3 pt-2">
-            <RouterLink :to="{ name: 'storage' }" class="flex items-center gap-3.5 text-[var(--text-secondary)] mb-3 transition-all duration-200 hover:text-[var(--text-main)] no-underline">
-              <i class="fa-solid fa-cloud w-5 text-center flex-shrink-0 text-lg"></i>
-              <span class="text-sm">저장용량</span>
+          <div class="space-y-1">
+            <RouterLink :to="{ name: 'trash' }" class="w-full flex items-center gap-3.5 px-3 py-2.5 text-sm text-[var(--text-secondary)] rounded-xl transition-all duration-200 hover:bg-[var(--bg-input)] hover:text-[var(--text-main)] no-underline">
+              <i class="fa-solid fa-trash w-5 text-center flex-shrink-0 text-lg"></i>
+              <span>휴지통</span>
             </RouterLink>
-            <div class="w-full bg-[var(--bg-input)] rounded-full h-1.5 mb-2 overflow-hidden">
-              <div class="bg-blue-600 dark:bg-blue-400 h-1.5 rounded-full transition-all duration-300" :style="{ width: storageUsageWidth }"></div>
-            </div>
-            <div class="border-t border-[var(--border-color)] my-4 mx-2"></div>
-          
-
+            <RouterLink
+              :to="{ name: 'storage' }"
+              class="w-full flex items-center gap-3.5 px-3 py-2.5 text-sm text-[var(--text-secondary)] rounded-xl transition-all duration-200 hover:bg-[var(--bg-input)] hover:text-[var(--text-main)] no-underline"
+              active-class="!bg-blue-500/10 !text-blue-600 !font-bold dark:!bg-blue-400/20 dark:!text-blue-400"
+            >
+              <i class="fa-solid fa-cloud w-5 text-center flex-shrink-0 text-lg"></i>
+              <span>저장용량</span>
+            </RouterLink>
             <RouterLink
               v-if="isAdministrator"
               :to="{ name: 'administrator' }"
@@ -411,10 +370,6 @@ const handleAction = async (action, idx) => {
               <i class="fa-solid fa-user-shield w-5 text-center flex-shrink-0 text-lg"></i>
               <span>관리자 페이지</span>
             </RouterLink>
-            <p class="text-xs text-[var(--text-muted)] mb-1">{{ storageUsageText }}</p>
-            <p v-if="storageSummary" class="text-[11px] text-[var(--text-muted)] mb-4">{{ storageSummary.planLabel }} 플랜 · 휴지통 포함 {{ storageSummary.usagePercent }}%</p>
-            <p v-else class="text-[11px] text-[var(--text-muted)] mb-4">저장 공간 통계 확인 중</p>
-            <RouterLink :to="{ name: 'payment' }" class="block w-full text-center border border-[var(--border-color)] px-2 py-2 rounded-full text-sm font-semibold text-blue-600 dark:text-blue-400 bg-[var(--bg-main)] transition-all duration-200 hover:bg-blue-500/10 dark:hover:bg-blue-400/10">추가 저장용량 구매</RouterLink>
           </div>
         </nav>
       </div>
@@ -422,11 +377,14 @@ const handleAction = async (action, idx) => {
 
     <button
       @click="toggleSidebar"
+      type="button"
       class="sidebar-toggle absolute top-4 z-50 flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border-color)] bg-[var(--bg-elevated)] text-[var(--text-main)] shadow-lg transition-all duration-300 hover:bg-[var(--bg-input)]"
       :style="sidebarToggleStyle"
       :title="isSidebarOpen ? '사이드바 숨기기' : '사이드바 보이기'"
+      :aria-label="isSidebarOpen ? '사이드바 숨기기' : '사이드바 보이기'"
+      :aria-expanded="isSidebarOpen"
     >
-      <i class="fas transition-transform duration-300" :class="isSidebarOpen ? 'fa-chevron-left' : 'fa-chevron-right'"></i>
+      <i class="fas transition-transform duration-300" :class="isSidebarOpen ? 'fa-chevron-left' : 'fa-chevron-right'" aria-hidden="true"></i>
     </button>
   </div>
 </template>

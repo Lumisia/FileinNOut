@@ -6,6 +6,9 @@ import postApi from '@/api/postApi'
 import { initEditor } from '@/components/workspace/editor'
 import loadpost from '@/components/workspace/loadpost'
 import { useAuthStore } from '@/stores/useAuthStore'
+import { useToastStore } from '@/stores/useToastStore'
+import { useDialog } from '@/composables/useDialog'
+import { useFocusTrap } from '@/composables/useFocusTrap'
 import SockJS from 'sockjs-client'
 import Stomp from 'stompjs'
 import { apiPath } from '@/utils/backendUrl'
@@ -14,12 +17,17 @@ import { fetchPostVersions, fetchPostVersion } from '@/api/versionsApi'
 const route     = useRoute()
 const router    = useRouter()
 const authStore = useAuthStore()
+const toast     = useToastStore()
+const { confirm } = useDialog()
 
 const editorHolder    = ref(null)
 const editorApi       = ref(null)
 const title           = ref('')
 const isEditorLoading = ref(false)
 const isSaving        = ref(false)
+const saveStatus      = ref('idle') // 'idle' | 'saving' | 'saved' | 'error'
+const lastSavedAt     = ref(null)
+const loadError       = ref(null)   // null | { kind: 'forbidden'|'notfound'|'network'|'unknown', status }
 const showUserList    = ref(false)
 const titleDirty      = ref(false)
 const allowRouteLeaveOnce  = ref(false)
@@ -55,6 +63,39 @@ const hasUnsavedChanges = computed(() =>
 
 const remoteCursors = computed(() => editorApi.value?.remoteCursorsRef?.value || {})
 const activeUsers   = computed(() => editorApi.value?.activeUsersRef?.value   || [])
+
+const formatClock = (ts) =>
+  new Intl.DateTimeFormat('ko-KR', { hour: '2-digit', minute: '2-digit' }).format(new Date(ts))
+
+// 저장 상태 표시: 협업 동기화(Yjs)와 별개로 "서버 영구 저장" 상태를 분명히 보여준다.
+const saveIndicator = computed(() => {
+  if (saveStatus.value === 'saving') return { tone: 'saving', text: '저장 중…' }
+  if (saveStatus.value === 'error')  return { tone: 'error',  text: '저장 실패' }
+  if (hasUnsavedChanges.value)       return { tone: 'dirty',  text: '변경사항 있음' }
+  if (lastSavedAt.value)             return { tone: 'saved',  text: `저장됨 · ${formatClock(lastSavedAt.value)}` }
+  return null
+})
+
+const loadErrorTitle = computed(() => {
+  switch (loadError.value?.kind) {
+    case 'forbidden': return '접근 권한이 없습니다'
+    case 'notfound':  return '문서를 찾을 수 없습니다'
+    default:          return '문서를 불러오지 못했습니다'
+  }
+})
+
+const loadErrorDesc = computed(() => {
+  switch (loadError.value?.kind) {
+    case 'forbidden': return '이 문서를 볼 수 있는 권한이 없습니다. 소유자에게 공유를 요청하세요.'
+    case 'notfound':  return '삭제되었거나 잘못된 링크일 수 있습니다.'
+    case 'network':   return '네트워크 연결을 확인한 뒤 다시 시도해 주세요.'
+    default:          return '잠시 후 다시 시도해 주세요.'
+  }
+})
+
+const canRetryLoad = computed(
+  () => Boolean(loadError.value) && !['forbidden', 'notfound'].includes(loadError.value.kind),
+)
 
 const canManageAssets = computed(() => {
   if (!workspaceId.value) return true
@@ -152,7 +193,7 @@ const handleWorkspaceAssetRealtimeEvent = (payload = {}) => {
     removeWorkspaceAssets(payload.assetIdxList)
     return
   }
-  refreshWorkspaceAssets(workspaceId.value).catch(() => {})
+  void refreshWorkspaceAssets(workspaceId.value)
 }
 
 // ─── STOMP 연결 / 해제 ────────────────────────────────────────────────────────
@@ -208,7 +249,7 @@ const connectWorkspaceAssetRealtime = (targetWorkspaceId = workspaceId.value) =>
           handleWorkspaceAssetRealtimeEvent(payload)
         } catch (error) {
           console.error('Workspace asset realtime payload parse failed:', error)
-          refreshWorkspaceAssets(normalizedWorkspaceId).catch(() => {})
+          void refreshWorkspaceAssets(normalizedWorkspaceId)
         }
       })
     },
@@ -248,6 +289,9 @@ const versionPanelOpen  = ref(false)
 const versions          = ref([])
 const versionPreview    = ref(null)
 const versionsLoading   = ref(false)
+const versionLoadError  = ref('')
+const versionPanelRef   = ref(null)
+useFocusTrap(() => versionPanelOpen.value, versionPanelRef, { onEsc: () => closeVersionPanel() })
 
 const formatVersionDate = (val) => {
   if (!val) return ''
@@ -257,30 +301,45 @@ const formatVersionDate = (val) => {
   }).format(new Date(val))
 }
 
-const openVersionPanel = async () => {
+const getVersionErrorMessage = (error, fallback) => (
+  error?.response?.data?.message || error?.message || fallback
+)
+
+const loadVersionList = async () => {
   if (!workspaceId.value) return
-  versionPanelOpen.value = true
   versionsLoading.value  = true
+  versionLoadError.value = ''
   try {
     versions.value = await fetchPostVersions(workspaceId.value)
-  } catch {
-    versions.value = []
+  } catch (error) {
+    versionLoadError.value = getVersionErrorMessage(error, '버전 이력을 불러오지 못했습니다.')
   } finally {
     versionsLoading.value = false
   }
 }
 
+const openVersionPanel = async () => {
+  if (!workspaceId.value) return
+  versionPanelOpen.value = true
+  await loadVersionList()
+}
+
+const retryVersionList = () => {
+  void loadVersionList()
+}
+
 const closeVersionPanel = () => {
   versionPanelOpen.value = false
   versionPreview.value   = null
+  versionLoadError.value = ''
 }
 
 const previewVersion = async (versionNum) => {
   if (!workspaceId.value) return
   try {
     versionPreview.value = await fetchPostVersion(workspaceId.value, versionNum)
-  } catch {
-    alert('버전을 불러오지 못했습니다.')
+  } catch (error) {
+    toast.error(getVersionErrorMessage(error, '버전을 불러오지 못했습니다.'))
   }
 }
 
@@ -288,16 +347,32 @@ const previewVersion = async (versionNum) => {
 const handleSave = async () => {
   if (!editorApi.value?.savePost || isSaving.value) return
   // 저장 진행 중에는 버튼 비활성(회색), 완료되면 원래(파란색)로 복귀
-  isSaving.value = true
+  isSaving.value   = true
+  saveStatus.value = 'saving'
   try {
-    const response         = await editorApi.value.savePost()
-    const savedWorkspaceId = response?.result?.body?.idx ?? response?.data?.idx ?? response?.idx ?? null
-    if (!savedWorkspaceId) return
+    const response = await editorApi.value.savePost()
+    // savePost 가 throw 하지 않으면 서버 영구 저장 성공.
     titleDirty.value = false
     editorApi.value?.markSaved?.()
-    workspaceId.value         = Number(savedWorkspaceId)
-    workspaceAccessRole.value = 'ADMIN'
-    router.push(`/workspace/read/${savedWorkspaceId}`)
+    saveStatus.value  = 'saved'
+    lastSavedAt.value = Date.now()
+
+    // 새로 생성된 문서면 읽기 경로로 이동(기존 문서 재저장은 idx 가 없을 수 있음).
+    const savedWorkspaceId = response?.result?.body?.idx ?? response?.data?.idx ?? response?.idx ?? null
+    if (savedWorkspaceId) {
+      workspaceId.value         = Number(savedWorkspaceId)
+      workspaceAccessRole.value = 'ADMIN'
+      if (String(route.params.id || '') !== String(savedWorkspaceId)) {
+        router.push(`/workspace/read/${savedWorkspaceId}`)
+      }
+    }
+  } catch (error) {
+    // 저장 실패: 내용은 그대로 유지(editor.isDirtyRef=true)하고 사용자에게 알린다.
+    console.error('워크스페이스 저장 실패:', error)
+    saveStatus.value = 'error'
+    toast.error('저장에 실패했습니다. 변경사항은 그대로 유지됩니다.', {
+      action: { label: '다시 시도', handler: () => handleSave() },
+    })
   } finally {
     isSaving.value = false
   }
@@ -317,13 +392,13 @@ const handleRoleAction = async (user, action) => {
 
   try {
     if (action === 'KICKED') {
-      if (!confirm(`${user.name} 님을 추방하시겠습니까?`)) return
+      if (!(await confirm({ title: '참여자 추방', message: `${user.name} 님을 추방하시겠습니까?`, confirmText: '추방', danger: true }))) return
       await postApi.kickUser(workspaceId.value, user.userIdx)
     } else {
       await postApi.changeUserRole(workspaceId.value, user.userIdx, action)
     }
   } catch (e) {
-    alert('권한 변경에 실패했습니다.')
+    toast.error('권한 변경에 실패했습니다.')
   }
 }
 
@@ -337,7 +412,7 @@ const handleSseRoleChanged = (evt) => {
   if (Number(postIdx) !== Number(workspaceId.value)) return
 
   if (newRole === 'KICKED') {
-    alert('해당 워크스페이스에서 추방되었습니다.')
+    toast.warning('해당 워크스페이스에서 추방되었습니다.')
     allowRouteLeaveOnce.value = true
     // 홈으로 강제 이동 + 사이드바 협업목록 갱신(추방된 워크스페이스 제거)
     router.push({ name: 'home' }).finally(() => { loadpost.side_list() })
@@ -395,7 +470,7 @@ const handleBeforeUnload = (event) => {
   return LEAVE_WARNING_MESSAGE
 }
 
-onBeforeRouteLeave(() => {
+onBeforeRouteLeave(async () => {
   if (allowRouteLeaveOnce.value) {
     allowRouteLeaveOnce.value = false
     return true
@@ -403,10 +478,10 @@ onBeforeRouteLeave(() => {
 
   if (!hasUnsavedChanges.value) return true
 
-  return window.confirm(LEAVE_WARNING_MESSAGE)
+  return await confirm({ title: '페이지 나가기', message: LEAVE_WARNING_MESSAGE, confirmText: '나가기', cancelText: '머무르기', danger: true })
 })
 
-onBeforeRouteUpdate(() => {
+onBeforeRouteUpdate(async () => {
   if (allowRouteLeaveOnce.value) {
     allowRouteLeaveOnce.value = false
     return true
@@ -414,7 +489,7 @@ onBeforeRouteUpdate(() => {
 
   if (!hasUnsavedChanges.value) return true
 
-  return window.confirm(LEAVE_WARNING_MESSAGE)
+  return await confirm({ title: '페이지 나가기', message: LEAVE_WARNING_MESSAGE, confirmText: '나가기', cancelText: '머무르기', danger: true })
 })
 
 watch(workspaceAssets, (assets) => {
@@ -433,27 +508,21 @@ const prepareData = async () => {
     return route.meta.initialData
   }
   try {
-    const data = await postApi.getPost(id)
-    return data
+    return await postApi.getPost(id)
   } catch (error) {
-    const normalizedId = Number(id)
-    const isReadonlyRoute =
-      route.name === 'workspace_readonly' ||
-      String(route.path || '').startsWith('/workspace/readonly/')
-    const isCollaborativeRoute =
-      isReadonlyRoute ||
-      route.name === 'workspace_read' ||
-      String(route.path || '').startsWith('/workspace/read/')
+    // 이전에는 실패 시 빈 문서를 반환해 "새 문서"처럼 보였고, 그대로 저장하면
+    // 기존 문서를 덮어쓸 위험이 있었다. 이제는 오류 정보를 보존해 호출자(setupEditor)가
+    // 안전 화면을 띄우게 한다. (협업 콘텐츠는 로드 성공 후 Yjs 룸으로 동기화되므로 안전)
+    const rawStatus = Number(error?.response?.status ?? error?.code)
+    const kind =
+      rawStatus === 403 ? 'forbidden'
+        : rawStatus === 404 ? 'notfound'
+        : (error?.response || error?.baseResponse) ? 'unknown'
+        : 'network'
 
-    return {
-      idx: Number.isFinite(normalizedId) ? normalizedId : null,
-      title: '',
-      contents: '',
-      type: isCollaborativeRoute,
-      status: isCollaborativeRoute ? 'Public' : 'Private',
-      uuid: '',
-      accessRole: isReadonlyRoute ? 'READ' : isCollaborativeRoute ? 'WRITE' : 'ADMIN',
-    }
+    const failure = new Error('document-load-failed')
+    failure.loadFailure = { kind, status: Number.isFinite(rawStatus) ? rawStatus : null }
+    throw failure
   }
 }
 
@@ -551,7 +620,7 @@ const saveWorkspaceAssetToDrive = async (asset) => {
   workspaceAssetError.value     = ''
   try {
     await postApi.saveWorkspaceAssetToDrive(workspaceId.value, asset.id)
-    window.alert('파일이 드라이브에 저장되었습니다.')
+    toast.success('파일이 드라이브에 저장되었습니다.')
   } catch (error) {
     workspaceAssetError.value =
       error?.response?.data?.message || error?.message || '파일을 드라이브에 저장하지 못했습니다.'
@@ -564,7 +633,8 @@ const downloadWorkspaceAsset = async (asset) => {
   if (!asset?.downloadUrl) return
   try {
     await downloadFileAsset(asset, asset.originalName)
-  } catch {
+  } catch (error) {
+    console.error('Workspace asset download failed:', error)
     workspaceAssetError.value = '파일 다운로드에 실패했습니다.'
   }
 }
@@ -579,8 +649,19 @@ const setupEditor = async () => {
   isEditorLoading.value = true
   allowRouteLeaveOnce.value = false
   allowWindowUnloadOnce.value = false
-  const data = await prepareData()
+
+  let data
+  try {
+    data = await prepareData()
+  } catch (error) {
+    if (setupId !== currentSetupId) return
+    console.error('워크스페이스 로드 실패:', error)
+    loadError.value = error?.loadFailure ?? { kind: 'unknown', status: null }
+    isEditorLoading.value = false
+    return
+  }
   if (setupId !== currentSetupId) return
+  loadError.value = null
 
   // 기존 에디터를 먼저 정리하고 새 editor를 준비한다.
   if (editorApi.value) {
@@ -595,6 +676,8 @@ const setupEditor = async () => {
 
   title.value               = data.title || ''
   titleDirty.value          = false
+  saveStatus.value          = 'idle'
+  lastSavedAt.value         = null
   workspaceId.value         = data.idx ? Number(data.idx) : null
   workspaceAccessRole.value = data.accessRole || data.level || 'ADMIN'
 
@@ -638,6 +721,12 @@ const setupEditor = async () => {
   } finally {
     if (setupId === currentSetupId) isEditorLoading.value = false
   }
+}
+
+const retryLoad = async () => {
+  loadError.value = null
+  await nextTick()
+  await setupEditor()
 }
 
 // ─── UUID 초대 링크 처리 ──────────────────────────────────────────────────────
@@ -772,6 +861,11 @@ onBeforeUnmount(async () => {
         </div>
 
         <div class="flex items-center gap-2">
+          <span v-if="saveIndicator" class="save-indicator" :class="`save-indicator--${saveIndicator.tone}`">
+            <span class="save-indicator__dot"></span>
+            {{ saveIndicator.text }}
+          </span>
+          <button v-if="saveStatus === 'error'" type="button" class="save-retry-btn" @click="handleSave">다시 시도</button>
           <button :disabled="!isValid || isSaving" @click="handleSave" class="save-btn">{{ isSaving ? '저장 중...' : '저장' }}</button>
           <button
             v-if="workspaceId"
@@ -792,16 +886,34 @@ onBeforeUnmount(async () => {
         class="fixed inset-0 z-[900] flex items-start justify-end"
         @click.self="closeVersionPanel"
       >
-        <div class="w-80 h-full bg-white shadow-2xl border-l border-gray-200 flex flex-col overflow-hidden" @click.stop>
+        <div
+          ref="versionPanelRef"
+          class="w-80 h-full bg-white shadow-2xl border-l border-gray-200 flex flex-col overflow-hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="version-panel-title"
+          tabindex="-1"
+          @click.stop
+        >
           <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-            <span class="font-bold text-sm text-gray-700">버전 이력</span>
+            <span id="version-panel-title" class="font-bold text-sm text-gray-700">버전 이력</span>
             <button @click="closeVersionPanel" class="text-gray-400 hover:text-gray-600">
               <i class="fa-solid fa-xmark"></i>
             </button>
           </div>
 
-          <div v-if="versionsLoading" class="flex-1 flex items-center justify-center text-xs text-gray-400">
-            불러오는 중...
+          <div v-if="versionsLoading" class="version-skeleton flex-1 px-4 py-4" aria-label="버전 이력을 불러오는 중입니다.">
+            <div v-for="row in [1, 2, 3, 4, 5]" :key="row" class="version-skeleton__row">
+              <span></span>
+              <span></span>
+            </div>
+          </div>
+          <div v-else-if="versionLoadError" class="version-error-panel flex-1 px-4 py-6 text-xs text-rose-600">
+            <p class="font-semibold">버전 이력을 불러오지 못했습니다.</p>
+            <p class="mt-1 break-words">{{ versionLoadError }}</p>
+            <button type="button" class="version-error-panel__button" :disabled="versionsLoading" @click="retryVersionList">
+              {{ versionsLoading ? "다시 시도 중..." : "다시 시도" }}
+            </button>
           </div>
           <div v-else-if="!versions.length" class="flex-1 flex items-center justify-center text-xs text-gray-400">
             저장된 버전이 없습니다.
@@ -917,8 +1029,19 @@ onBeforeUnmount(async () => {
       </div>
 
       <div class="editor-body">
-        <div v-if="isEditorLoading" class="loading-overlay">로딩 중...</div>
-        <div ref="editorHolder" id="editor-holder" class="editor-holder"></div>
+        <div v-if="loadError" class="load-error">
+          <i class="fa-solid fa-triangle-exclamation load-error__icon" aria-hidden="true"></i>
+          <h3 class="load-error__title">{{ loadErrorTitle }}</h3>
+          <p class="load-error__desc">{{ loadErrorDesc }}</p>
+          <div class="load-error__actions">
+            <button v-if="canRetryLoad" type="button" class="load-error__btn load-error__btn--primary" @click="retryLoad">다시 시도</button>
+            <button type="button" class="load-error__btn" @click="router.push({ name: 'home' })">홈으로</button>
+          </div>
+        </div>
+        <template v-else>
+          <div v-if="isEditorLoading" class="loading-overlay">로딩 중...</div>
+          <div ref="editorHolder" id="editor-holder" class="editor-holder"></div>
+        </template>
       </div>
 
       <div class="cursors-overlay" aria-hidden>
@@ -1084,6 +1207,62 @@ onBeforeUnmount(async () => {
 
 .asset-action-btn--secondary { background: #0f172a; }
 
+/* ─── 저장 상태 표시 ─────────────────────────────────────────────────────── */
+.save-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--text-muted, #64748b);
+}
+.save-indicator__dot { width: 7px; height: 7px; border-radius: 999px; background: currentColor; }
+.save-indicator--saving { color: #2563eb; }
+.save-indicator--error  { color: #dc2626; }
+.save-indicator--dirty  { color: #d97706; }
+.save-indicator--saved  { color: #16a34a; }
+
+.save-retry-btn {
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid #fca5a5;
+  background: rgba(220, 38, 38, 0.08);
+  color: #dc2626;
+  font-weight: 800;
+  font-size: 13px;
+  cursor: pointer;
+}
+.save-retry-btn:hover { background: rgba(220, 38, 38, 0.16); }
+
+/* ─── 문서 로드 실패 안전 화면 ───────────────────────────────────────────── */
+.load-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 10px;
+  min-height: 48vh;
+  padding: 40px 20px;
+}
+.load-error__icon { font-size: 34px; color: #f59e0b; }
+.load-error__title { font-size: 18px; font-weight: 800; color: var(--editor-text); }
+.load-error__desc { max-width: 360px; font-size: 14px; line-height: 1.5; color: #64748b; }
+.load-error__actions { display: flex; gap: 10px; margin-top: 8px; }
+.load-error__btn {
+  padding: 9px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--editor-border);
+  background: var(--editor-input-bg);
+  color: var(--editor-text);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+.load-error__btn--primary { background: #2563eb; color: #fff; border-color: #2563eb; }
+.load-error__btn--primary:hover { background: #1d4ed8; }
+
 .user-presence-wrapper { position: relative; }
 
 .presence-toggle-btn {
@@ -1232,6 +1411,62 @@ onBeforeUnmount(async () => {
 .dropdown-item--danger:hover { background: rgba(220, 38, 38, 0.07); }
 
 /* ─── 나머지 기존 스타일 유지 ────────────────────────────────────────────── */
+
+.version-skeleton {
+  display: grid;
+  align-content: start;
+  gap: 0.75rem;
+}
+
+.version-skeleton__row {
+  display: grid;
+  gap: 0.45rem;
+  border-radius: 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--border-color) 72%, transparent);
+  background: color-mix(in srgb, var(--bg-input) 58%, var(--bg-elevated) 42%);
+  padding: 0.8rem;
+}
+
+.version-skeleton__row span {
+  display: block;
+  height: 0.72rem;
+  border-radius: 999px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--border-color) 70%, transparent), color-mix(in srgb, var(--bg-elevated) 88%, transparent), color-mix(in srgb, var(--border-color) 70%, transparent));
+  background-size: 220% 100%;
+  animation: version-skeleton-pulse 1.25s ease-in-out infinite;
+}
+
+.version-skeleton__row span:first-child {
+  width: 46%;
+}
+
+.version-skeleton__row span:last-child {
+  width: 78%;
+}
+
+.version-error-panel__button {
+  margin-top: 0.8rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--danger) 32%, transparent);
+  background: var(--bg-elevated);
+  color: var(--danger);
+  font-weight: 800;
+  padding: 0.48rem 0.8rem;
+}
+
+.version-error-panel__button:hover:not(:disabled) {
+  background: var(--danger-soft);
+}
+
+.version-error-panel__button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+@keyframes version-skeleton-pulse {
+  0% { background-position: 120% 0; }
+  100% { background-position: -120% 0; }
+}
 
 .workspace-assets {
   padding: 20px;

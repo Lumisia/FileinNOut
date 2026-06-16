@@ -16,6 +16,9 @@ const recentFilesMonth = computed(() =>
   <BaseFileView
     title="최근 파일"
     :files="recentFilesMonth"
+    empty-icon="fa-regular fa-clock"
+    empty-title="최근 파일이 없습니다"
+    empty-description="최근 30일 동안 수정한 파일이 여기에 표시됩니다."
     @delete="fileStore.moveToTrash"
   />
 </template>
