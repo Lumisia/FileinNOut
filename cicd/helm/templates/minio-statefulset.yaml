@@ -1,0 +1,102 @@
+{{- if .Values.minio.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.minio.service.name }}
+  labels:
+    app.kubernetes.io/name: minio
+    app.kubernetes.io/part-of: wafflebear
+spec:
+  selector:
+    app.kubernetes.io/name: minio
+    app.kubernetes.io/part-of: wafflebear
+  ports:
+    - name: api
+      port: {{ .Values.minio.service.apiPort }}
+      targetPort: api
+    - name: console
+      port: {{ .Values.minio.service.consolePort }}
+      targetPort: console
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Values.minio.service.name }}
+  labels:
+    app.kubernetes.io/name: minio
+    app.kubernetes.io/part-of: wafflebear
+spec:
+  serviceName: {{ .Values.minio.service.name }}
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: minio
+      app.kubernetes.io/part-of: wafflebear
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: minio
+        app.kubernetes.io/part-of: wafflebear
+    spec:
+{{ include "wafflebear.workerScheduling" (dict "root" . "labels" (dict "app.kubernetes.io/name" "minio" "app.kubernetes.io/part-of" "wafflebear")) | nindent 6 }}
+      containers:
+        - name: minio
+          image: "{{ .Values.minio.image.repository }}:{{ .Values.minio.image.tag }}"
+          imagePullPolicy: {{ .Values.minio.image.pullPolicy }}
+          command:
+            - minio
+          args:
+            - server
+            - /data
+            - --console-address
+            - ":{{ .Values.minio.service.consolePort }}"
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "wafflebear.fullname" . }}-backend-env
+                  key: MINIO_NAME
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "wafflebear.fullname" . }}-backend-env
+                  key: MINIO_SECRET
+          ports:
+            - name: api
+              containerPort: {{ .Values.minio.service.apiPort }}
+            - name: console
+              containerPort: {{ .Values.minio.service.consolePort }}
+          volumeMounts:
+            - name: minio-data
+              mountPath: /data
+          readinessProbe:
+            httpGet:
+              path: /minio/health/ready
+              port: api
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /minio/health/live
+              port: api
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+{{ toYaml .Values.minio.resources | indent 12 }}
+{{- if .Values.minio.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: minio-data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: {{ .Values.minio.persistence.storageClassName | quote }}
+        resources:
+          requests:
+            storage: {{ .Values.minio.persistence.size | quote }}
+{{- else }}
+      volumes:
+        - name: minio-data
+          emptyDir: {}
+{{- end }}
+{{- end }}

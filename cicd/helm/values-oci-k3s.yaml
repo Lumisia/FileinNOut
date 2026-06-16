@@ -39,6 +39,20 @@ mariadb:
       cpu: "1000m"
       memory: "1536Mi"
 
+minio:
+  enabled: true
+  persistence:
+    enabled: true
+    storageClassName: local-path
+    size: 4Gi
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "192Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
 frontend:
   replicaCount: 1
   image:
