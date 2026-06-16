@@ -8,7 +8,7 @@ plugins {
 docker {
 	println(tasks.bootJar.outputs.files)
 	name "lumisia/backend:" + version
-	dockerfile file('./cicd/backend.dockerfile')
+	dockerfile file('../cicd/backend.dockerfile')
 	files tasks.bootJar.outputs.files
 	buildArgs(['JAR_FILE': tasks.bootJar.archiveFileName.get()])
 }

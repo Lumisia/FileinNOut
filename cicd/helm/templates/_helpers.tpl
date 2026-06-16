@@ -12,6 +12,9 @@ wafflebear
 {{- end -}}
 
 {{- define "wafflebear.workerScheduling" -}}
+{{- $root := .root -}}
+{{- $labels := .labels -}}
+{{- if $root.Values.scheduling.workerOnly }}
 affinity:
   nodeAffinity:
     requiredDuringSchedulingIgnoredDuringExecution:
@@ -32,5 +35,6 @@ topologySpreadConstraints:
     whenUnsatisfiable: DoNotSchedule
     labelSelector:
       matchLabels:
-{{ toYaml . | nindent 8 }}
+{{ toYaml $labels | nindent 8 }}
+{{- end }}
 {{- end -}}

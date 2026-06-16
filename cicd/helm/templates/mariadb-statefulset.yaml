@@ -28,7 +28,7 @@ spec:
       labels:
         app: mariadb-stateful
     spec:
-{{ include "wafflebear.workerScheduling" (dict "app" "mariadb-stateful") | nindent 6 }}
+{{ include "wafflebear.workerScheduling" (dict "root" . "labels" (dict "app" "mariadb-stateful")) | nindent 6 }}
       containers:
         - name: mariadb
           image: "{{ .Values.mariadb.image.repository }}:{{ .Values.mariadb.image.tag }}"

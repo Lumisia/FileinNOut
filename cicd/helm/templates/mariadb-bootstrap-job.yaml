@@ -18,7 +18,7 @@ spec:
         app.kubernetes.io/name: mariadb-bootstrap
         app.kubernetes.io/part-of: wafflebear
     spec:
-{{ include "wafflebear.workerScheduling" (dict "app.kubernetes.io/name" "mariadb-bootstrap" "app.kubernetes.io/part-of" "wafflebear") | nindent 6 }}
+{{ include "wafflebear.workerScheduling" (dict "root" . "labels" (dict "app.kubernetes.io/name" "mariadb-bootstrap" "app.kubernetes.io/part-of" "wafflebear")) | nindent 6 }}
       restartPolicy: OnFailure
       containers:
         - name: mariadb-bootstrap

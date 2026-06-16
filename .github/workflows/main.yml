@@ -1,14 +1,22 @@
-name: Lumisia CD (Deploy to Server)
+name: Manual Image Build and Helm Deploy
 
 on:
-  push:
-    branches: ["main"]
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: "Run Helm deploy after pushing images"
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
 
 jobs:
-  build-and-deploy:
+  build-and-optional-deploy:
     runs-on: ubuntu-latest
     env:
-      COMPOSE_IMAGE_TAG: v${{ github.run_number }}
+      COMPOSE_IMAGE_TAG: ${{ github.sha }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -19,41 +27,32 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build Compose Images
+      - name: Build images
         run: |
           docker compose -f docker-compose.yml build backend-app websocket-server frontend
 
-      - name: Push Compose Images
+      - name: Push images
         run: |
           docker compose -f docker-compose.yml push backend-app websocket-server frontend
 
-      - name: Tag and Push Latest Images
-        run: |
-          docker tag lumisia/backend:${{ env.COMPOSE_IMAGE_TAG }} lumisia/backend:latest
-          docker tag lumisia/websocket-server:${{ env.COMPOSE_IMAGE_TAG }} lumisia/websocket-server:latest
-          docker tag lumisia/frontend:${{ env.COMPOSE_IMAGE_TAG }} lumisia/frontend:latest
-          docker push lumisia/backend:latest
-          docker push lumisia/websocket-server:latest
-          docker push lumisia/frontend:latest
-
       - name: Setup Helm
-        if: ${{ secrets.KUBE_CONFIG != '' && secrets.HELM_VALUES_PRIVATE != '' }}
+        if: ${{ inputs.deploy == 'true' && secrets.KUBE_CONFIG != '' && secrets.HELM_VALUES_PRIVATE != '' }}
         uses: azure/setup-helm@v4
 
       - name: Setup kubectl
-        if: ${{ secrets.KUBE_CONFIG != '' && secrets.HELM_VALUES_PRIVATE != '' }}
+        if: ${{ inputs.deploy == 'true' && secrets.KUBE_CONFIG != '' && secrets.HELM_VALUES_PRIVATE != '' }}
         uses: azure/setup-kubectl@v4
 
-      - name: Deploy Helm Release
-        if: ${{ secrets.KUBE_CONFIG != '' && secrets.HELM_VALUES_PRIVATE != '' }}
+      - name: Deploy Helm release
+        if: ${{ inputs.deploy == 'true' && secrets.KUBE_CONFIG != '' && secrets.HELM_VALUES_PRIVATE != '' }}
         env:
           KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
           HELM_VALUES_PRIVATE: ${{ secrets.HELM_VALUES_PRIVATE }}
           HELM_RELEASE_NAME: ${{ vars.HELM_RELEASE_NAME }}
           K8S_NAMESPACE: ${{ vars.K8S_NAMESPACE }}
         run: |
-          RELEASE_NAME="${HELM_RELEASE_NAME:-wafflebear}"
-          NAMESPACE="${K8S_NAMESPACE:-default}"
+          RELEASE_NAME="${HELM_RELEASE_NAME:-fileinnout}"
+          NAMESPACE="${K8S_NAMESPACE:-fileinnout}"
 
           mkdir -p "$HOME/.kube"
           printf '%s' "$KUBE_CONFIG" > "$HOME/.kube/config"
@@ -65,7 +64,10 @@ jobs:
             --namespace "$NAMESPACE" \
             --create-namespace \
             -f cicd/helm/values.yaml \
+            -f cicd/helm/values-oci-k3s.yaml \
             -f cicd/helm/values.private.ci.yaml \
             --set-string backend.image.tag="${COMPOSE_IMAGE_TAG}" \
             --set-string frontend.image.tag="${COMPOSE_IMAGE_TAG}" \
-            --set-string websocket.image.tag="${COMPOSE_IMAGE_TAG}"
+            --set-string websocket.image.tag="${COMPOSE_IMAGE_TAG}" \
+            --wait \
+            --timeout 10m
