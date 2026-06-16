@@ -17,31 +17,46 @@ const currentPost    = ref({ title: '', contents: null });
 // allPosts() 반환값 = PostDto.ResList[]  (배열 그 자체)
 // ─────────────────────────────────────────────────────────────────────────────
 
+// 동시에 여러 side_list 호출이 일어날 때(예: 공개 링크 입장 시 Sidebar.onMounted 와
+// WorkSpace 의 입장 후 갱신이 경쟁) 응답 도착 순서에 따라 오래된 결과가 최신 목록을
+// 덮어쓰는 race 를 방지. 항상 "가장 마지막에 시작된 호출"의 결과만 반영한다.
+let sideListSeq = 0;
+
 const side_list = async () => {
+    const seq = ++sideListSeq;
     try {
         // response = PostDto.ResList[]
         const response = await postApi.allPosts();
+
+        // 이 호출 이후 더 최신 side_list 가 시작됐다면 결과를 버린다(stale 덮어쓰기 방지)
+        if (seq !== sideListSeq) return response;
+
         console.log('목록 가져오기 성공:', response);
 
-        personalItems.value = [];
-        sharedItems.value   = [];
+        const nextPersonal = [];
+        const nextShared   = [];
 
         if (Array.isArray(response)) {
             response.forEach(item => {
                 if (item.status && item.status.toUpperCase() !== 'PRIVATE') {
-                    sharedItems.value.push(item);
+                    nextShared.push(item);
                 } else {
-                    personalItems.value.push(item);
+                    nextPersonal.push(item);
                 }
             });
         }
+
+        personalItems.value = nextPersonal;
+        sharedItems.value   = nextShared;
 
         return response;
 
     } catch (e) {
         // workspaceApi 에서 이미 [side_list] 실패 — [code] message 형태로 출력됨
-        personalItems.value = [];
-        sharedItems.value   = [];
+        if (seq === sideListSeq) {
+            personalItems.value = [];
+            sharedItems.value   = [];
+        }
     }
 };
 

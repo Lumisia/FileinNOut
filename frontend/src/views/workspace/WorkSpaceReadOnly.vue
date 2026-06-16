@@ -210,8 +210,8 @@ const renderedContent = computed(() => renderContent(rawContent.value))
 
 // ── 테마 동기화 ───────────────────────────────────────────────────────────────
 const syncTheme = () => {
-  const saved = localStorage.getItem('theme')
-  const dark = saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches)
+  // 앱 전역 테마(Header.initTheme)와 동일: 저장값이 'dark'일 때만 다크.
+  const dark = localStorage.getItem('theme') === 'dark'
   document.documentElement.classList.toggle('dark', dark)
 }
 

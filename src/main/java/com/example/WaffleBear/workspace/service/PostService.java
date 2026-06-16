@@ -63,13 +63,6 @@ public class PostService {
                     .orElseThrow(() -> new BaseException(WORKSPACE_NOT_FOUND));
             result.update(dto.title(), dto.contents());
             pr.save(result);
-
-            if (dto.idempotencyKey() != null && !dto.idempotencyKey().isBlank()) {
-                postVersionService.createSnapshot(result, user.getIdx(), dto.idempotencyKey());
-            }
-
-            List<Long> user_list = upr.findUserIdsByPostIdx(result.getIdx());
-            sseService.sendTitleUpdate(result.getIdx(), result.getTitle(), user_list);
         } else {
             result = new Post();
             result.update(dto.title(), dto.contents());
@@ -77,11 +70,18 @@ public class PostService {
 
             pr.save(result);
             upr.save(new UserPostDto.ReqUserPost(null, null).toEntity(result, user));
-
-            // 생성 직후에도 동일한 방식으로 SSE 타이틀 전파
-            List<Long> user_list = upr.findUserIdsByPostIdx(result.getIdx());
-            sseService.sendTitleUpdate(result.getIdx(), result.getTitle(), user_list);
         }
+
+        // 저장할 때마다 버전 이력 생성 (생성/수정 모두). key 가 없으면 서버에서 발급 →
+        // 키 유무와 무관하게 항상 스냅샷 생성, 같은 저장의 재시도만 dedupe.
+        String idempotencyKey = (dto.idempotencyKey() == null || dto.idempotencyKey().isBlank())
+                ? UUID.randomUUID().toString()
+                : dto.idempotencyKey();
+        postVersionService.createSnapshot(result, user.getIdx(), idempotencyKey);
+
+        // 스냅샷까지 성공한 뒤 SSE 타이틀 전파 (스냅샷 실패 시 트랜잭션 롤백 → 알림도 안 나감)
+        List<Long> user_list = upr.findUserIdsByPostIdx(result.getIdx());
+        sseService.sendTitleUpdate(result.getIdx(), result.getTitle(), user_list);
 
         AccessRole accessRole = upr.findByUser_IdxAndWorkspace_Idx(user.getIdx(), result.getIdx())
                 .map(UserPost::getLevel)
@@ -148,7 +148,10 @@ public class PostService {
 
         if (result.getLevel().equals(AccessRole.ADMIN)) {
             Post workspace = result.getWorkspace();
-            workspaceAssetService.deleteAllWorkspaceAssets(workspace);
+            // post 를 참조하는 자식 행을 먼저 제거해야 FK 제약 위반(500) 없이 삭제된다.
+            workspaceAssetService.deleteAllWorkspaceAssets(workspace);   // workspace_asset (+ MinIO)
+            postVersionService.deleteAllForPost(workspace.getIdx());     // post_versions
+            upr.deleteAllByWorkspace_Idx(workspace.getIdx());            // user_post
             pr.delete(workspace);
             return SUCCESS;
         }

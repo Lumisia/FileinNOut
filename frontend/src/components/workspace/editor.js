@@ -22,6 +22,7 @@ import { ref } from 'vue'
 import postApi from '@/api/postApi'
 import { getYjsStatusUrl, getYjsWebsocketUrl } from '@/utils/yjsUrl'
 import loadpost from './loadpost'
+import { createBlockBinding } from './collab/editorBinding.js'
 
 export async function initEditor(holderElement, room, initialData, idx, initialTitle, isPrivate, options = {}) {
   if (!holderElement) throw new Error('holderElement is required')
@@ -83,13 +84,12 @@ Redis 연결 상태 = ${status.redisAvailable === true ? '연결됨' : '연결 �
     }, 5000)
   }
 
-  const yMap         = ydoc.getMap('workspace_data')
   const yTitle       = ydoc.getText('title')
   const yPermissions = ydoc.getMap('permissions')
   const LOCAL_EDIT_ORIGIN = Symbol('local-edit-origin')
   let hasSeededInitialTitle = false
-  let hasSeededInitialContents = false
 
+  // ─── 초기 데이터 파싱 ─────────────────────────────────────────────────────
   let initialParsedData = { blocks: [] }
   try {
     if (typeof initialData === 'string' && initialData.trim() !== '' && initialData !== '""') {
@@ -100,9 +100,7 @@ Redis 연결 상태 = ${status.redisAvailable === true ? '연결됨' : '연결 �
   } catch (e) {
     console.warn('Initial data parsing failed', e)
   }
-
-  const hasInitialBlocks = Array.isArray(initialParsedData.blocks) && initialParsedData.blocks.length > 0
-  const initialContentsString = hasInitialBlocks ? JSON.stringify(initialParsedData) : ''
+  const initialBlocks = Array.isArray(initialParsedData.blocks) ? initialParsedData.blocks : []
 
   const runLocalTransaction = (callback) => {
     ydoc.transact(callback, LOCAL_EDIT_ORIGIN)
@@ -124,41 +122,20 @@ Redis 연결 상태 = ${status.redisAvailable === true ? '연결됨' : '연결 �
     })
   }
 
-  const seedInitialContentsIfNeeded = () => {
-    if (hasSeededInitialContents) {
+  // ─── 협업 블록 바인딩 (Phase 1: 블록 단위 Y.Array<Y.Map>) ─────────────────
+  // 단일 키 blob → 블록 단위 모델. 서로 다른 블록 동시 편집은 유실 없이 병합된다.
+  // (같은 블록 동시 편집은 블록 단위 LWW — Phase 2 에서 블록당 Y.Text 로 개선 예정)
+  let blockBinding = null
+  let localPushTimer = null
+
+  const scheduleLocalPush = () => {
+    if (!blockBinding || blockBinding.isApplyingRemote()) {
       return
     }
-
-    hasSeededInitialContents = true
-    if (!initialContentsString || yMap.get('contents')) {
-      return
-    }
-
-    runLocalTransaction(() => {
-      yMap.set('contents', initialContentsString)
-    })
-  }
-
-  if (provider) {
-    provider.on('status', ({ status }) => {
-      if (status === 'connected') {
-        startRealtimeStatusLogging()
-        return
-      }
-
-      if (status === 'disconnected') {
-        stopRealtimeStatusLogging()
-      }
-    })
-
-    provider.on('sync', (isSynced) => {
-      if (!isSynced) return
-      seedInitialTitleIfNeeded()
-      seedInitialContentsIfNeeded()
-    })
-  } else {
-    seedInitialTitleIfNeeded()
-    seedInitialContentsIfNeeded()
+    clearTimeout(localPushTimer)
+    localPushTimer = setTimeout(() => {
+      void blockBinding.pushLocal()
+    }, 150)
   }
 
   const awareness        = provider ? provider.awareness : null
@@ -293,14 +270,7 @@ Redis 연결 상태 = ${status.redisAvailable === true ? '연결됨' : '연결 �
   }
 
   let editor                = null
-  let suppressLocal         = false
-  let isRendering           = false
   let previousImageAssets   = new Map()
-  let pendingYVal           = null
-  let remoteRenderInFlight  = false
-  let localSyncTimer        = null
-  let currentRenderedContents = ''
-  let pendingLocalSnapshot  = null
   let titleObserver         = null
 
   const isDirtyRef = ref(false)
@@ -321,175 +291,19 @@ Redis 연결 상태 = ${status.redisAvailable === true ? '연결됨' : '연결 �
     )
   }
 
-  const parseEditorSnapshot = (value) => {
-    if (value == null || value === '') {
-      return { blocks: [] }
-    }
-
-    if (typeof value === 'string') {
-      const trimmed = value.trim()
-      if (!trimmed || trimmed === '""') {
-        return { blocks: [] }
-      }
-
-      try {
-        const parsed = JSON.parse(trimmed)
-        return parsed && typeof parsed === 'object' ? parsed : { blocks: [] }
-      } catch (error) {
-        console.warn('[YJS] failed to parse editor snapshot', error)
-        return { blocks: [] }
-      }
-    }
-
-    if (typeof value === 'object') {
-      return value && typeof value === 'object' ? value : { blocks: [] }
-    }
-
-    return { blocks: [] }
-  }
-
-  const syncEditorToYjs = async (serializedSnapshot = null) => {
-    if (suppressLocal || isRendering || !editor) {
-      return
-    }
-
-    try {
-      const newString =
-        typeof serializedSnapshot === 'string'
-          ? serializedSnapshot
-          : JSON.stringify(await editor.save())
-      if (yMap.get('contents') === newString) {
-        currentRenderedContents = newString
-        return
-      }
-
-      runLocalTransaction(() => {
-        yMap.set('contents', newString)
-      })
-
-      currentRenderedContents = newString
-    } catch (error) {
-      console.error('[YJS] local editor sync failed', error)
-    }
-  }
-
-  const scheduleLocalSync = (savedSnapshot = null) => {
-    if (suppressLocal || isRendering) {
-      return
-    }
-
-    if (savedSnapshot) {
-      pendingLocalSnapshot = JSON.stringify(savedSnapshot)
-    }
-
-    clearTimeout(localSyncTimer)
-    localSyncTimer = setTimeout(() => {
-      const nextSnapshot = pendingLocalSnapshot
-      pendingLocalSnapshot = null
-      void syncEditorToYjs(nextSnapshot)
-    }, 100)
-  }
-  // ─── 블록 단위 diff 적용 ──────────────────────────────────────────────────
-  async function renderFromY(yval) {
-    if (!yval || yval === '""' || yval === '') {
-      return
-    }
-
-    if (!editor) {
-      pendingYVal = yval
-      return
-    }
-
-    if (isRendering || remoteRenderInFlight) {
-      pendingYVal = yval
-      return
-    }
-
-    const parsed = parseEditorSnapshot(yval)
-    const serialized = JSON.stringify(parsed)
-
-    if (!serialized || serialized === currentRenderedContents) {
-      return
-    }
-
-    remoteRenderInFlight = true
-    isRendering = true
-    suppressLocal = true
-
-    try {
-      await editor.isReady
-      await editor.render(parsed)
-      currentRenderedContents = serialized
-      refreshImageAssetSnapshot(parsed.blocks || [])
-    } catch (error) {
-      console.warn('[YJS] remote render failed', error)
-    } finally {
-      setTimeout(() => {
-        suppressLocal = false
-        isRendering = false
-        remoteRenderInFlight = false
-
-        if (!pendingYVal) {
-          return
-        }
-
-        const nextYVal = pendingYVal
-        pendingYVal = null
-        if (nextYVal !== yval) {
-          void renderFromY(nextYVal).catch((error) => {
-            console.warn('[YJS] pending remote render flush failed', error)
-          })
-        }
-      }, 50)
-    }
-  }
-
-  const flushPendingRender = async () => {
-    if (isRendering || remoteRenderInFlight || !pendingYVal) {
-      return
-    }
-
-    const nextYVal = pendingYVal
-    pendingYVal = null
-    await renderFromY(nextYVal)
-  }
-
-  // ─── 초기 데이터 파싱 ─────────────────────────────────────────────────────
-  let parsedData = { blocks: [] }
-  try {
-    if (typeof initialData === 'string' && initialData.trim() !== '' && initialData !== '""') {
-      parsedData = JSON.parse(initialData)
-    } else if (initialData && typeof initialData === 'object' && initialData.blocks) {
-      parsedData = initialData
-    }
-  } catch (e) {
-    console.warn('Initial data parsing failed', e)
-  }
-  currentRenderedContents = JSON.stringify(parsedData)
-
   // ─── EditorJS 인스턴스 ────────────────────────────────────────────────────
   editor = new EditorJS({
     holder:      holderElement,
     placeholder: '명령어 "/" 로 블록 추가',
-    data:        parsedData,
+    data:        initialParsedData,
     tools,
     onReady: async () => {
-      const initialY = yMap.get('contents')
-      if (initialY) {
-        await renderFromY(initialY)
-      } else if (!provider && hasInitialBlocks) {
-        runLocalTransaction(() => {
-          yMap.set('contents', initialContentsString)
-        })
-      }
-
       const initialSaved = await editor.save()
       refreshImageAssetSnapshot(initialSaved.blocks)
-      currentRenderedContents = JSON.stringify(initialSaved)
-      await flushPendingRender()
     },
     onChange: async () => {
-      if (suppressLocal || isRendering) return
+      // 원격 변경을 에디터에 반영하는 중이면 로컬 푸시/이미지 추적 모두 건너뜀 (피드백 루프 방지)
+      if (blockBinding && blockBinding.isApplyingRemote()) return
       markDirty()
       try {
         const saved = await editor.save()
@@ -509,7 +323,7 @@ Redis 연결 상태 = ${status.redisAvailable === true ? '연결됨' : '연결 �
 
         previousImageAssets = currentImageAssets
 
-        scheduleLocalSync(saved)
+        scheduleLocalPush()
       } catch (err) {
         console.error('editor save failed', err)
       }
@@ -517,6 +331,40 @@ Redis 연결 상태 = ${status.redisAvailable === true ? '연결됨' : '연결 �
   })
 
   await editor.isReady
+
+  // 에디터 준비 후 협업 바인딩 생성 + 초기 시드
+  blockBinding = createBlockBinding({
+    editor,
+    ydoc,
+    getSavedBlocks: async () => (await editor.save()).blocks,
+  })
+
+  const seedCollab = () => {
+    seedInitialTitleIfNeeded()
+    void blockBinding.seed(initialBlocks)
+  }
+
+  if (!provider) {
+    seedCollab()
+  } else {
+    provider.on('status', ({ status }) => {
+      if (status === 'connected') {
+        startRealtimeStatusLogging()
+        return
+      }
+      if (status === 'disconnected') {
+        stopRealtimeStatusLogging()
+      }
+    })
+
+    if (provider.synced) {
+      seedCollab()
+    } else {
+      provider.once('sync', (isSynced) => {
+        if (isSynced) seedCollab()
+      })
+    }
+  }
 
   // ─── 타이틀 바인딩 ────────────────────────────────────────────────────────
   function bindTitleRef(titleRef) {
@@ -577,13 +425,6 @@ Redis 연결 상태 = ${status.redisAvailable === true ? '연결됨' : '연결 �
     }
   }
 
-  // ─── Y.js 콘텐츠 변경 감지 ────────────────────────────────────────────────
-  yMap.observe((event) => {
-    if (event?.transaction?.origin === LOCAL_EDIT_ORIGIN) return
-    const newContents = yMap.get('contents')
-    void renderFromY(newContents)
-  })
-
   // ─── 마우스 커서 트래킹 ────────────────────────────────────────────────────
   let animationFrameId = null
 
@@ -612,8 +453,12 @@ Redis 연결 상태 = ${status.redisAvailable === true ? '연결됨' : '연결 �
   function destroy() {
     if (animationFrameId) cancelAnimationFrame(animationFrameId)
     window.removeEventListener('mousemove', handleMouseMove)
-    clearTimeout(localSyncTimer)
+    clearTimeout(localPushTimer)
     stopRealtimeStatusLogging()
+    if (blockBinding) {
+      blockBinding.dispose()
+      blockBinding = null
+    }
     if (titleObserver) {
       yTitle.unobserve(titleObserver)
       titleObserver = null

@@ -43,6 +43,12 @@ public class PostVersionService {
                 });
     }
 
+    // 워크스페이스 삭제 시 해당 게시글의 모든 버전 스냅샷 제거 (FK 제약 회피)
+    @Transactional
+    public void deleteAllForPost(Long postIdx) {
+        postVersionRepository.deleteByPost_Idx(postIdx);
+    }
+
     @Transactional(readOnly = true)
     public List<PostVersionDto.ListItem> listVersions(Long postId, Long userIdx) {
         verifyAccess(postId, userIdx, false);

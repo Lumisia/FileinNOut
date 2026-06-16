@@ -21,6 +21,9 @@ public interface UserPostRepository extends JpaRepository<UserPost, Long> {
 
     Optional<UserPost> deleteByUser_IdxAndWorkspace_Idx(Long userId, Long workspaceId);
 
+    // 워크스페이스 삭제 시 자식(user_post) 행 선삭제용 (FK 제약 회피)
+    void deleteAllByWorkspace_Idx(Long workspaceId);
+
     @Query("SELECT up FROM UserPost up " +
             "WHERE up.workspace.idx = :workspaceId " +
             "AND up.user.idx IN :userIds " +
