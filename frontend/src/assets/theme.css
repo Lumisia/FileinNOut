@@ -63,7 +63,7 @@ body {
     radial-gradient(circle at top right, rgba(96, 165, 250, 0.05), transparent 24%);
 }
 
-* {
+:where(a, button, input, textarea, select, .card, .panel, .modal-content) {
   transition-property: background-color, border-color, color, box-shadow;
   transition-duration: 0.2s;
   transition-timing-function: ease;
