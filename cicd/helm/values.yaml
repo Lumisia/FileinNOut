@@ -1,6 +1,11 @@
 nameOverride: ""
 fullnameOverride: ""
 
+scheduling:
+  # Keep application workloads on worker nodes for multi-node clusters.
+  # Single-node k3s overlays can set this to false.
+  workerOnly: true
+
 backend:
   replicaCount: 1
   image:
@@ -64,6 +69,7 @@ backend:
       cpu: "1500m"
       memory: "2Gi"
   rollout:
+    enabled: true
     blueGreen:
       autoPromotionEnabled: true
       scaleDownDelaySeconds: 60
@@ -109,6 +115,7 @@ frontend:
       cpu: "300m"
       memory: "384Mi"
   rollout:
+    enabled: true
     blueGreen:
       autoPromotionEnabled: true
       scaleDownDelaySeconds: 60
@@ -141,6 +148,7 @@ websocket:
       cpu: "500m"
       memory: "512Mi"
   rollout:
+    enabled: true
     blueGreen:
       autoPromotionEnabled: true
       scaleDownDelaySeconds: 120
@@ -223,6 +231,8 @@ ingress:
   hosts:
     frontend: "www.fileinnoutcloud.kro.kr"
     backend: "api.fileinnoutcloud.kro.kr"
+    api: "api.fileinnoutcloud.kro.kr"
+    swagger: ""
     
   tls:
     enabled: true

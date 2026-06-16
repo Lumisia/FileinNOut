@@ -1,0 +1,30 @@
+# kiali/kiali-operator values for OCI single-node k3s.
+# The public Kiali hostname must be protected with Cloudflare Access.
+
+cr:
+  create: true
+  namespace: istio-system
+  spec:
+    auth:
+      strategy: anonymous
+    deployment:
+      view_only_mode: true
+      accessible_namespaces:
+        - "**"
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "256Mi"
+        limits:
+          cpu: "300m"
+          memory: "512Mi"
+    external_services:
+      prometheus:
+        url: "http://prometheus-server.observability.svc.cluster.local"
+      tracing:
+        enabled: true
+        in_cluster_url: "http://jaeger-query.observability.svc.cluster.local:16686"
+        url: "https://jaeger.example.com"
+        use_grpc: false
+      istio:
+        root_namespace: istio-system
