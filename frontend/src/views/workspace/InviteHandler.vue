@@ -12,9 +12,11 @@ import { onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import postApi from '@/api/postApi';
 import loadpost from '@/components/workspace/loadpost';
+import { useToastStore } from '@/stores/useToastStore';
 
 const route = useRoute();
 const router = useRouter();
+const toast = useToastStore();
 
 onMounted(async () => {
   const postIdx = route.params.postIdx;
@@ -24,7 +26,7 @@ onMounted(async () => {
     // (백엔드에 해당 API가 구현되어 있어야 합니다. 예: acceptInvite)
     await postApi.inviteUser(postIdx);
     
-    alert('초대가 수락되었습니다!');
+    toast.success('초대가 수락되었습니다!');
     
     // 처리가 완료되면 해당 워크스페이스 읽기 페이지로 이동
     await loadpost.side_list();
@@ -32,10 +34,10 @@ onMounted(async () => {
   } catch (error) {
     if(error == 200) {
         console.error('Invite error:', error);
-        alert('본인의 Post에 본인을 초대할수 없습니다.');
+        toast.error('본인의 Post에 본인을 초대할수 없습니다.');
     }else if(error == 300) {
         console.error('Invite error:', error);
-        alert('만료된 초대이거나 권한이 없습니다.');
+        toast.error('만료된 초대이거나 권한이 없습니다.');
     }
     router.push({ name: 'home' });
   }

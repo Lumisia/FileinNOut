@@ -62,6 +62,30 @@ const visibleSharedFiles = computed(() => {
 
   return receivedSharedFiles.value;
 });
+
+const emptyState = computed(() => {
+  if (activeFilter.value === "sent") {
+    return {
+      icon: "fa-solid fa-share-nodes",
+      title: "아직 공유한 문서가 없습니다",
+      description: "홈에서 파일의 공유 기능으로 다른 사용자나 그룹과 함께 볼 수 있어요.",
+    };
+  }
+
+  if (activeFilter.value === "all") {
+    return {
+      icon: "fa-solid fa-share-from-square",
+      title: "공유 문서가 없습니다",
+      description: "공유받았거나 내가 공유한 문서가 여기에 모입니다.",
+    };
+  }
+
+  return {
+    icon: "fa-solid fa-inbox",
+    title: "공유받은 문서가 없습니다",
+    description: "다른 사용자가 파일을 공유하면 여기에 표시됩니다.",
+  };
+});
 </script>
 
 <template>
@@ -69,6 +93,9 @@ const visibleSharedFiles = computed(() => {
     title="공유 문서함"
     :files="visibleSharedFiles"
     :shared-library="true"
+    :empty-icon="emptyState.icon"
+    :empty-title="emptyState.title"
+    :empty-description="emptyState.description"
   >
     <template #header-right>
       <div class="share-filter-group" role="tablist" aria-label="공유 파일 보기 필터">

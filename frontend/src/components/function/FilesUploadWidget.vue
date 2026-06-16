@@ -157,9 +157,11 @@ import { onBeforeRouteLeave } from "vue-router";
 import { abortUpload, completeUpload, initUploadFiles, parseUploadResponse } from "@/api/filesApi.js";
 import { api } from "@/plugins/axiosinterceptor";
 import { useFileStore } from "@/stores/useFileStore";
+import { useDialog } from "@/composables/useDialog";
 
 const emit = defineEmits(["upload-complete", "upload-fail"]);
 const fileStore = useFileStore();
+const { prompt } = useDialog();
 
 const PARTITION_SIZE_BYTES = 100 * 1024 * 1024;
 const CHUNK_SIZE_BYTES = 80 * 1024 * 1024;
@@ -307,6 +309,12 @@ function toggleDropdown() {
 
 function closeDropdown() {
   isDropdownOpen.value = false;
+}
+
+// 빈 화면 등 외부 CTA 가 업로드 패널을 열도록 요청할 때(window 이벤트).
+function handleOpenUploadRequest() {
+  isPanelHidden.value = false;
+  isDropdownOpen.value = true;
 }
 
 function togglePanelCollapsed() {
@@ -629,7 +637,8 @@ async function abortUploadedFile(uploadMetas) {
 
   try {
     await abortUpload(payload);
-  } catch {
+  } catch (error) {
+    console.error("Upload abort cleanup failed:", error);
   }
 }
 
@@ -820,8 +829,11 @@ function abortUploadsKeepalive() {
         body: JSON.stringify(payload),
         keepalive: true,
         credentials: "include",
-      }).catch(() => {});
-    } catch {
+      }).catch((error) => {
+        console.error("Upload abort keepalive request failed:", error);
+      });
+    } catch (error) {
+      console.error("Upload abort keepalive setup failed:", error);
     }
   });
 }
@@ -834,7 +846,9 @@ async function handleUpload(event, uploadTypeLabel) {
 
   try {
     if (!fileStore.storageSummary && !fileStore.storageLoading) {
-      await fileStore.fetchStorageSummary().catch(() => {});
+      await fileStore.fetchStorageSummary().catch((error) => {
+        console.error("Upload storage summary fetch failed:", error);
+      });
     }
 
     if (selectedFiles.length > maxUploadCount.value) {
@@ -876,9 +890,13 @@ async function handleUpload(event, uploadTypeLabel) {
 
     if (successList.length > 0) {
       if (fileStore.driveHasLoaded && !fileStore.hasLoaded) {
-        await fileStore.refreshDrivePage().catch(() => {});
+        await fileStore.refreshDrivePage().catch((error) => {
+          console.error("Drive page refresh after upload failed:", error);
+        });
       } else {
-        await fileStore.fetchFiles().catch(() => {});
+        await fileStore.fetchFiles().catch((error) => {
+          console.error("File list refresh after upload failed:", error);
+        });
       }
       emit("upload-complete", successList);
     }
@@ -920,8 +938,8 @@ async function handleRefreshRequest() {
   window.location.reload();
 }
 
-function createNewFolder() {
-  const folderName = prompt("폴더 이름을 입력해 주세요.");
+async function createNewFolder() {
+  const folderName = await prompt({ title: "새 폴더", label: "폴더 이름", placeholder: "폴더 이름을 입력해 주세요." });
   if (!folderName?.trim()) {
     closeDropdown();
     return;
@@ -992,13 +1010,17 @@ onMounted(() => {
   document.addEventListener("keydown", handleKeydown);
   window.addEventListener("beforeunload", handleBeforeUnload);
   window.addEventListener("pagehide", handlePageHide);
-  fileStore.fetchStorageSummary().catch(() => {});
+  window.addEventListener("open-file-upload", handleOpenUploadRequest);
+  fileStore.fetchStorageSummary().catch((error) => {
+    console.error("Upload widget storage summary fetch failed:", error);
+  });
 });
 
 onBeforeUnmount(() => {
   document.removeEventListener("keydown", handleKeydown);
   window.removeEventListener("beforeunload", handleBeforeUnload);
   window.removeEventListener("pagehide", handlePageHide);
+  window.removeEventListener("open-file-upload", handleOpenUploadRequest);
   activeUploadControllers.forEach((controller) => controller.abort());
   activeUploadControllers.clear();
   if (exitDialogResolver) {

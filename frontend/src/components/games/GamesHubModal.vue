@@ -2,6 +2,7 @@
 import { computed, ref, watch } from "vue";
 import OpenHexagonArena from "@/legup/openhexagon/OpenHexagonArena.vue";
 import RockPaperScissorsArena from "@/legup/rps/RockPaperScissorsArena.vue";
+import { useFocusTrap } from "@/composables/useFocusTrap";
 
 const props = defineProps({
   isOpen: {
@@ -15,6 +16,9 @@ const props = defineProps({
 });
 
 const emit = defineEmits(["close"]);
+
+const panelRef = ref(null);
+useFocusTrap(() => props.isOpen, panelRef, { onEsc: () => emit("close") });
 
 const gameCatalog = [
   {
@@ -114,11 +118,13 @@ const handleBackdropClick = (event) => {
 <template>
   <div v-if="isOpen" class="games-hub-overlay" @click="handleBackdropClick">
     <section
+      ref="panelRef"
       class="games-hub-modal"
       :class="{ 'is-expanded': isExpandedView, 'is-sidebar-collapsed': isSidebarCollapsed }"
       role="dialog"
       aria-modal="true"
       aria-labelledby="games-hub-title"
+      tabindex="-1"
     >
       <header class="games-hub-header">
         <div>
