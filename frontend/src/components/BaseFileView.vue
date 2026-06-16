@@ -374,6 +374,27 @@ const isInitialLoading = computed(() => (
       : fileStore.allFiles.length === 0
   )
 ));
+const fileListSkeletonRows = [1, 2, 3, 4, 5, 6];
+
+const getActionErrorMessage = (error, fallback) => (
+  error?.response?.data?.message || error?.message || fallback
+);
+
+const loadFileList = async (query = null) => {
+  try {
+    if (query) {
+      await fileStore.fetchDrivePage(query);
+    } else {
+      await fileStore.fetchFiles();
+    }
+  } catch (error) {
+    toast.error(getActionErrorMessage(error, "파일 목록을 불러오지 못했습니다."));
+  }
+};
+
+const retryFileList = () => {
+  void loadFileList(serverListQuery.value);
+};
 
 watch(effectiveFiles, (files) => {
   const validIds = new Set((files || []).map((file) => String(file?.id)));
@@ -389,7 +410,7 @@ watch(serverListQuery, (query) => {
     return;
   }
 
-  fileStore.fetchDrivePage(query).catch(() => {});
+  void loadFileList(query);
 }, { immediate: true, deep: true });
 
 watch(() => [
@@ -425,6 +446,32 @@ const clearSelection = () => {
   selectedIds.value = [];
 };
 
+const showUndoToast = ({ message, undo, undoSuccessMessage, undoErrorMessage, onUndoSuccess }) => {
+  if (!undo) {
+    toast.success(message);
+    return;
+  }
+
+  toast.success(message, {
+    timeout: 8000,
+    action: {
+      label: "실행 취소",
+      handler: () => {
+        void undo()
+          .then(async () => {
+            if (onUndoSuccess) {
+              await onUndoSuccess();
+            }
+            toast.success(undoSuccessMessage);
+          })
+          .catch((error) => {
+            toast.error(getActionErrorMessage(error, undoErrorMessage));
+          });
+      },
+    },
+  });
+};
+
 const navigateToFolder = (folderId) => {
   if (useServerPaging.value) {
     currentPage.value = 1;
@@ -439,9 +486,24 @@ const handleGoBack = () => {
   fileStore.goBack();
 };
 
-const handleDelete = (fileId) => {
+const handleDelete = async (fileId) => {
   selectedIds.value = selectedIds.value.filter((id) => String(id) !== String(fileId));
-  emit("delete", fileId);
+  if (props.deleteMode === "permanent") {
+    emit("delete", fileId);
+    return;
+  }
+
+  try {
+    const result = await fileStore.moveToTrashOptimistic(fileId);
+    showUndoToast({
+      message: "휴지통으로 이동했습니다.",
+      undo: result?.undo,
+      undoSuccessMessage: "원래 위치로 복원했습니다.",
+      undoErrorMessage: "실행 취소에 실패했습니다.",
+    });
+  } catch (error) {
+    toast.error(getActionErrorMessage(error, "파일을 휴지통으로 이동하지 못했습니다."));
+  }
 };
 
 const handleRestore = async (fileId) => {
@@ -478,11 +540,22 @@ const handleDeleteSelected = async () => {
   if (!(await confirm({ title: props.deleteMode === 'permanent' ? '영구 삭제' : '삭제', message: confirmMessage, confirmText: props.deleteMode === 'permanent' ? '영구 삭제' : '삭제', danger: true }))) return;
   try {
     const ids = selectedFiles.value.map((file) => file.id);
-    if (props.deleteMode === "permanent") await fileStore.permanentlyDeleteBatch(ids);
-    else await fileStore.trashFilesBatch(ids);
+    if (props.deleteMode === "permanent") {
+      await fileStore.permanentlyDeleteBatch(ids);
+      clearSelection();
+      return;
+    }
+
+    const result = await fileStore.trashFilesBatchOptimistic(ids);
     clearSelection();
+    showUndoToast({
+      message: `선택한 ${ids.length}개 항목을 휴지통으로 이동했습니다.`,
+      undo: result?.undo,
+      undoSuccessMessage: "선택한 항목을 원래 위치로 복원했습니다.",
+      undoErrorMessage: "실행 취소에 실패했습니다.",
+    });
   } catch (error) {
-    toast.error(error?.response?.data?.message || error?.message || "\uC120\uD0DD\uD55C \uD56D\uBAA9\uC744 \uCC98\uB9AC\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.");
+    toast.error(getActionErrorMessage(error, "\uC120\uD0DD\uD55C \uD56D\uBAA9\uC744 \uCC98\uB9AC\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4."));
   }
 };
 
@@ -538,13 +611,19 @@ const handleBatchCancelSentShares = async () => {
   }
 
   try {
-    const targetIds = selectedCancelableSentSharedFiles.value.map((file) => file.id);
+    const targetFiles = [...selectedCancelableSentSharedFiles.value];
+    const targetIds = targetFiles.map((file) => file.id);
     const targetIdSet = new Set(targetIds.map((id) => String(id)));
-    await fileStore.cancelAllSharedFiles(targetIds);
+    const result = await fileStore.cancelAllSharedFilesOptimistic(targetFiles);
     selectedIds.value = selectedIds.value.filter((id) => !targetIdSet.has(String(id)));
-    toast.success("선택한 파일의 공유를 모두 취소했습니다.");
+    showUndoToast({
+      message: "선택한 파일의 공유를 모두 취소했습니다.",
+      undo: result?.canUndo ? result.undo : null,
+      undoSuccessMessage: "공유 취소를 되돌렸습니다.",
+      undoErrorMessage: "공유 취소 되돌리기에 실패했습니다.",
+    });
   } catch (error) {
-    toast.error(error?.response?.data?.message || error?.message || "선택한 파일의 공유를 취소하지 못했습니다.");
+    toast.error(getActionErrorMessage(error, "선택한 파일의 공유를 취소하지 못했습니다."));
   }
 };
 
@@ -729,12 +808,27 @@ const cancelShare = async (recipientEmail = shareCancelEmail.value) => {
   }
   isSharing.value = true;
   shareError.value = "";
+  const previousShareInfo = [...shareInfo.value];
+  const normalizedEmailKey = normalizedEmail.toLowerCase();
+  shareInfo.value = shareInfo.value.filter((item) => String(item?.recipientEmail || "").trim().toLowerCase() !== normalizedEmailKey);
   try {
-    await fileStore.cancelSharedFiles(shareTargets.value.map((file) => file.id), normalizedEmail);
+    const result = await fileStore.cancelSharedFilesOptimistic(shareTargets.value.map((file) => file.id), normalizedEmail);
     shareCancelEmail.value = "";
     await loadShareInfo();
+    showUndoToast({
+      message: "공유를 취소했습니다.",
+      undo: result?.undo,
+      undoSuccessMessage: "공유 취소를 되돌렸습니다.",
+      undoErrorMessage: "공유 취소 되돌리기에 실패했습니다.",
+      onUndoSuccess: async () => {
+        if (shareTargets.value.length) {
+          await loadShareInfo();
+        }
+      },
+    });
   } catch (error) {
-    shareError.value = error?.response?.data?.message || error?.message || "\uACF5\uC720\uB97C \uCDE8\uC18C\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.";
+    shareInfo.value = previousShareInfo;
+    shareError.value = getActionErrorMessage(error, "\uACF5\uC720\uB97C \uCDE8\uC18C\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.");
   } finally {
     isSharing.value = false;
   }
@@ -836,11 +930,11 @@ const closeFilePreview = () => {
 
 onMounted(() => {
   if (props.sharedLibrary) {
-    fileStore.fetchFiles().catch(() => {});
+    void loadFileList();
     setLayoutPreset("20");
     sortOption.value = "sharedAt-desc";
   } else if (!useServerPaging.value && !fileStore.hasLoaded && !fileStore.isLoading) {
-    fileStore.fetchFiles().catch(() => {});
+    void loadFileList();
   }
 });
 </script>
@@ -941,40 +1035,62 @@ onMounted(() => {
         <button type="button" class="batch-button bg-transparent text-blue-700 hover:bg-blue-100" @click="clearSelection">{{ "\uC120\uD0DD \uD574\uC81C" }}</button>
       </div>
     </div>
-    <div v-if="isInitialLoading" class="rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-14 text-center text-sm text-gray-500">{{ "\uD30C\uC77C \uBAA9\uB85D\uC744 \uBD88\uB7EC\uC624\uB294 \uC911\uC785\uB2C8\uB2E4." }}</div>
-    <div v-else-if="fileStore.loadError" class="rounded-2xl border border-rose-200 bg-rose-50 px-6 py-4 text-sm text-rose-600">{{ fileStore.loadError }}</div>
-
-    <div v-else-if="paginatedFiles.length > 0">
-      <FileCollectionView
-        :selected-ids="selectedIds"
-        :files="paginatedFiles"
-        :delete-mode="deleteMode"
-        :show-parent-navigator="showFolderNavigation && Boolean(fileStore.currentFolder)"
-        :parent-folder-target-id="fileStore.currentFolder?.parentId ?? null"
-        :shared-library="sharedLibrary"
-        @update:selected-ids="selectedIds = $event"
-        @delete-file="handleDelete"
-        @restore-file="handleRestore"
-        @rename-folder="openRenameFolder"
-        @show-folder-properties="openFolderProperties"
-        @preview-file="openFilePreview"
-        @share-file="openShareDialog"
-        @toggle-lock="handleToggleLock"
-        @save-to-drive="handleSaveSharedToDrive"
-      />
-
-      <div class="file-pagination-bar mt-4 rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
-        <p class="text-sm text-gray-500">{{ currentPage }} / {{ pageCount }} {{ "\uD398\uC774\uC9C0" }}</p>
-        <div class="file-pagination-bar__pages">
-          <button type="button" class="page-button" :disabled="currentPage === 1" @click="currentPage -= 1">{{ "\uC774\uC804" }}</button>
-          <button v-for="page in pageNumbers" :key="page" type="button" class="page-button" :class="{ 'is-active': currentPage === page }" @click="currentPage = page">{{ page }}</button>
-          <button type="button" class="page-button" :disabled="currentPage === pageCount" @click="currentPage += 1">{{ "\uB2E4\uC74C" }}</button>
-        </div>
-        <div class="file-pagination-bar__spacer" aria-hidden="true"></div>
+    <div v-if="isInitialLoading" class="file-list-skeleton rounded-2xl border border-gray-200 bg-white p-4 shadow-sm" aria-label="파일 목록을 불러오는 중입니다.">
+      <div v-for="row in fileListSkeletonRows" :key="row" class="file-list-skeleton__row">
+        <span class="file-list-skeleton__icon"></span>
+        <span class="file-list-skeleton__main"></span>
+        <span class="file-list-skeleton__meta"></span>
+        <span class="file-list-skeleton__action"></span>
       </div>
     </div>
 
-    <div v-else-if="showEmpty" class="rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-14 text-center text-sm text-gray-400">{{ "\uD45C\uC2DC\uD560 \uD30C\uC77C\uC774 \uC5C6\uC2B5\uB2C8\uB2E4." }}</div>
+    <template v-else>
+      <div v-if="fileStore.loadError" class="file-error-panel mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700">
+        <div class="min-w-0">
+          <p class="font-semibold">파일 목록을 불러오지 못했습니다.</p>
+          <p class="mt-1 break-words text-rose-600">{{ fileStore.loadError }}</p>
+        </div>
+        <button type="button" class="file-error-panel__button" :disabled="fileStore.isLoading" @click="retryFileList">
+          {{ fileStore.isLoading ? "다시 시도 중..." : "다시 시도" }}
+        </button>
+      </div>
+
+      <div v-if="fileStore.isLoading && paginatedFiles.length > 0" class="file-refresh-indicator mb-4 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700">
+        파일 목록을 새로고침하고 있습니다.
+      </div>
+
+      <div v-if="paginatedFiles.length > 0">
+        <FileCollectionView
+          :selected-ids="selectedIds"
+          :files="paginatedFiles"
+          :delete-mode="deleteMode"
+          :show-parent-navigator="showFolderNavigation && Boolean(fileStore.currentFolder)"
+          :parent-folder-target-id="fileStore.currentFolder?.parentId ?? null"
+          :shared-library="sharedLibrary"
+          @update:selected-ids="selectedIds = $event"
+          @delete-file="handleDelete"
+          @restore-file="handleRestore"
+          @rename-folder="openRenameFolder"
+          @show-folder-properties="openFolderProperties"
+          @preview-file="openFilePreview"
+          @share-file="openShareDialog"
+          @toggle-lock="handleToggleLock"
+          @save-to-drive="handleSaveSharedToDrive"
+        />
+
+        <div class="file-pagination-bar mt-4 rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+          <p class="text-sm text-gray-500">{{ currentPage }} / {{ pageCount }} {{ "\uD398\uC774\uC9C0" }}</p>
+          <div class="file-pagination-bar__pages">
+            <button type="button" class="page-button" :disabled="currentPage === 1" @click="currentPage -= 1">{{ "\uC774\uC804" }}</button>
+            <button v-for="page in pageNumbers" :key="page" type="button" class="page-button" :class="{ 'is-active': currentPage === page }" @click="currentPage = page">{{ page }}</button>
+            <button type="button" class="page-button" :disabled="currentPage === pageCount" @click="currentPage += 1">{{ "\uB2E4\uC74C" }}</button>
+          </div>
+          <div class="file-pagination-bar__spacer" aria-hidden="true"></div>
+        </div>
+      </div>
+
+      <div v-else-if="!fileStore.loadError && showEmpty" class="rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-14 text-center text-sm text-gray-400">{{ "\uD45C\uC2DC\uD560 \uD30C\uC77C\uC774 \uC5C6\uC2B5\uB2C8\uB2E4." }}</div>
+    </template>
 
     <div v-if="renameTarget" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 px-4" @click.self="closeRenameModal">
       <div
@@ -1151,6 +1267,83 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.file-list-skeleton {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.file-list-skeleton__row {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr) minmax(7rem, 0.24fr) 5rem;
+  align-items: center;
+  gap: 0.85rem;
+  min-height: 3.4rem;
+  border-radius: 0.9rem;
+  background: color-mix(in srgb, var(--bg-input) 58%, var(--bg-elevated) 42%);
+  padding: 0.75rem 0.9rem;
+}
+
+.file-list-skeleton__icon,
+.file-list-skeleton__main,
+.file-list-skeleton__meta,
+.file-list-skeleton__action {
+  display: block;
+  border-radius: 999px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--border-color) 70%, transparent), color-mix(in srgb, var(--bg-elevated) 88%, transparent), color-mix(in srgb, var(--border-color) 70%, transparent));
+  background-size: 220% 100%;
+  animation: file-skeleton-pulse 1.25s ease-in-out infinite;
+}
+
+.file-list-skeleton__icon {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.7rem;
+}
+
+.file-list-skeleton__main,
+.file-list-skeleton__meta,
+.file-list-skeleton__action {
+  height: 0.8rem;
+}
+
+.file-list-skeleton__action {
+  height: 1.75rem;
+}
+
+.file-error-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.file-error-panel__button {
+  flex-shrink: 0;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--danger) 32%, transparent);
+  background: var(--bg-elevated);
+  color: var(--danger);
+  font-size: 0.82rem;
+  font-weight: 800;
+  padding: 0.55rem 0.9rem;
+  transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+
+.file-error-panel__button:hover:not(:disabled) {
+  background: var(--danger-soft);
+  border-color: color-mix(in srgb, var(--danger) 46%, transparent);
+}
+
+.file-error-panel__button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+@keyframes file-skeleton-pulse {
+  0% { background-position: 120% 0; }
+  100% { background-position: -120% 0; }
+}
+
 .toolbar-shell { display: grid; gap: 1rem; align-items: stretch; padding: 1.15rem 1.2rem 1.2rem; background: linear-gradient(180deg, color-mix(in srgb, var(--bg-secondary) 74%, var(--bg-main) 26%) 0%, var(--bg-elevated) 62%); border: 1px solid color-mix(in srgb, var(--border-color) 78%, transparent); border-radius: 1.7rem; box-shadow: var(--shadow-sm); }
 .toolbar-copy { display: flex; min-width: 0; flex-direction: column; gap: 0.72rem; }
 .toolbar-overview { border-radius: 1.3rem; border: 1px solid color-mix(in srgb, var(--border-color) 86%, transparent); background: color-mix(in srgb, var(--bg-elevated) 84%, var(--bg-input) 16%); padding: 1rem 1.05rem; }

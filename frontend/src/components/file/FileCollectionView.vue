@@ -323,7 +323,8 @@ const scheduleAssetRefresh = () => {
       } else {
         await fileStore.fetchFiles();
       }
-    } catch {
+    } catch (error) {
+      console.error("Asset list refresh failed:", error);
     }
   }, 900);
 };
@@ -628,7 +629,8 @@ const readDraggedFileIds = (event) => {
     if (Array.isArray(parsed?.fileIds)) {
       return parsed.fileIds.map((id) => String(id));
     }
-  } catch {
+  } catch (error) {
+    console.warn("File drag payload parse failed:", error);
     return [...draggingFileIds.value];
   }
 

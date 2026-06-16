@@ -26,6 +26,7 @@ import {
   setLockedFiles as setLockedFilesApi,
   shareFilesWithUser as shareFilesWithUserApi,
 } from "@/api/filesApi.js";
+import { removeItemsByKeys, restoreRemovedItems } from "@/utils/optimisticList.js";
 
 const ROOT_LOCATION_LABEL = "홈";
 const SHARED_LOCATION_LABEL = "공유 문서함";
@@ -91,6 +92,8 @@ const normalizeIdList = (ids) => {
     new Set((ids || []).map((value) => Number(value)).filter(Number.isFinite)),
   );
 };
+
+const getFileRecordKey = (file) => file?.id ?? file?.idx;
 
 const areDriveQueriesEqual = (left, right) => {
   if (!left || !right) {
@@ -303,7 +306,8 @@ export const useFileStore = defineStore("file", () => {
       }
 
       return JSON.parse(savedUser);
-    } catch {
+    } catch (error) {
+      console.error("Cached user parse failed:", error);
       return null;
     }
   };
@@ -430,6 +434,12 @@ export const useFileStore = defineStore("file", () => {
     }
   };
 
+  const refreshStorageSummaryInBackground = () => {
+    void fetchStorageSummary().catch((error) => {
+      console.error("Storage summary refresh failed:", error);
+    });
+  };
+
   const fetchFiles = async () => {
     isLoading.value = true;
     loadError.value = "";
@@ -448,7 +458,7 @@ export const useFileStore = defineStore("file", () => {
       sentSharedLibraryFiles.value = sentSharedList.map((file) => normalizeFileRecord(file, { sentShared: true }));
       hasLoaded.value = true;
       syncCurrentFolder();
-      fetchStorageSummary().catch(() => {});
+      refreshStorageSummaryInBackground();
       return allFiles.value;
     } catch (error) {
       loadError.value =
@@ -521,7 +531,7 @@ export const useFileStore = defineStore("file", () => {
       ]);
       syncCurrentFolder();
       if (!storageSummary.value && !storageLoading.value) {
-        fetchStorageSummary().catch(() => {});
+        refreshStorageSummaryInBackground();
       }
       return drivePageFiles.value;
     } catch (error) {
@@ -596,10 +606,130 @@ export const useFileStore = defineStore("file", () => {
     }
 
     if (storageSummary.value) {
-      fetchStorageSummary().catch(() => {});
+      refreshStorageSummaryInBackground();
     }
 
     return true;
+  };
+
+  const removeFileRecordsOptimistically = (fileIds, options = {}) => {
+    const normalizedIds = normalizeIdList(fileIds);
+    const snapshot = {
+      ids: normalizedIds,
+      allFiles: { removedEntries: [] },
+      drivePageFiles: { removedEntries: [] },
+      sentSharedLibraryFiles: { removedEntries: [] },
+      drivePageInfo: { ...drivePageInfo.value },
+    };
+
+    if (!normalizedIds.length) {
+      return snapshot;
+    }
+
+    if (options.includeAllFiles !== false) {
+      snapshot.allFiles = removeItemsByKeys(allFiles.value, normalizedIds, getFileRecordKey);
+      allFiles.value = snapshot.allFiles.nextItems;
+    }
+
+    if (options.includeDrivePage !== false) {
+      snapshot.drivePageFiles = removeItemsByKeys(drivePageFiles.value, normalizedIds, getFileRecordKey);
+      drivePageFiles.value = snapshot.drivePageFiles.nextItems;
+      const removedFromPage = snapshot.drivePageFiles.removedEntries.length;
+      if (removedFromPage > 0) {
+        drivePageInfo.value = {
+          ...drivePageInfo.value,
+          totalCount: Math.max(0, Number(drivePageInfo.value.totalCount || 0) - removedFromPage),
+          currentSize: Math.max(0, Number(drivePageInfo.value.currentSize || 0) - removedFromPage),
+        };
+      }
+    }
+
+    if (options.includeSentSharedFiles) {
+      snapshot.sentSharedLibraryFiles = removeItemsByKeys(sentSharedLibraryFiles.value, normalizedIds, getFileRecordKey);
+      sentSharedLibraryFiles.value = snapshot.sentSharedLibraryFiles.nextItems;
+    }
+
+    syncCurrentFolder();
+    return snapshot;
+  };
+
+  const rollbackFileRecordRemoval = (snapshot) => {
+    if (!snapshot?.ids?.length) {
+      return;
+    }
+
+    allFiles.value = restoreRemovedItems(allFiles.value, snapshot.allFiles?.removedEntries || [], getFileRecordKey);
+    drivePageFiles.value = restoreRemovedItems(drivePageFiles.value, snapshot.drivePageFiles?.removedEntries || [], getFileRecordKey);
+    sentSharedLibraryFiles.value = restoreRemovedItems(
+      sentSharedLibraryFiles.value,
+      snapshot.sentSharedLibraryFiles?.removedEntries || [],
+      getFileRecordKey,
+    );
+
+    if (snapshot.drivePageInfo) {
+      drivePageInfo.value = { ...snapshot.drivePageInfo };
+    }
+
+    rememberFolders(allFiles.value);
+    syncCurrentFolder();
+  };
+
+  const resolveKnownFileRecord = (fileRef) => {
+    if (fileRef && typeof fileRef === "object") {
+      return fileRef;
+    }
+
+    const fileId = String(fileRef);
+    return (
+      sentSharedLibraryFiles.value.find((file) => String(getFileRecordKey(file)) === fileId) ||
+      allFiles.value.find((file) => String(getFileRecordKey(file)) === fileId) ||
+      drivePageFiles.value.find((file) => String(getFileRecordKey(file)) === fileId) ||
+      null
+    );
+  };
+
+  const recipientEmailsFromRecord = (file) => {
+    return Array.from(new Set(
+      (file?.recipients || [])
+        .map((recipient) => String(recipient?.recipientEmail || recipient?.email || "").trim())
+        .filter(Boolean),
+    ));
+  };
+
+  const collectShareRecipients = async (fileRefs) => {
+    const recipientMap = new Map();
+
+    for (const fileRef of fileRefs) {
+      const fileId = typeof fileRef === "object" ? (fileRef?.id ?? fileRef?.idx) : fileRef;
+      if (fileId == null) {
+        continue;
+      }
+
+      const knownRecord = resolveKnownFileRecord(fileRef);
+      let emails = recipientEmailsFromRecord(knownRecord);
+
+      if (!emails.length) {
+        const shareInfo = await fetchFileShareInfoApi(fileId);
+        emails = Array.from(new Set(
+          (shareInfo || [])
+            .map((item) => String(item?.recipientEmail || item?.email || "").trim())
+            .filter(Boolean),
+        ));
+      }
+
+      recipientMap.set(String(fileId), emails);
+    }
+
+    return recipientMap;
+  };
+
+  const restoreFileShares = async (recipientsByFileId) => {
+    for (const [fileId, emails] of recipientsByFileId.entries()) {
+      for (const email of emails) {
+        await shareFilesWithUserApi([Number(fileId)], email);
+      }
+    }
+    await refreshAll();
   };
 
   const createFolder = async (folderName) => {
@@ -617,11 +747,58 @@ export const useFileStore = defineStore("file", () => {
     await refreshAll();
   };
 
+  const moveToTrashOptimistic = async (fileId) => {
+    const normalizedIds = normalizeIdList([fileId]);
+    if (!normalizedIds.length) {
+      return null;
+    }
+
+    const snapshot = removeFileRecordsOptimistically(normalizedIds);
+    try {
+      await moveFileToTrashApi(normalizedIds[0]);
+      await refreshAll();
+      return {
+        undo: async () => {
+          await restoreFileFromTrashApi(normalizedIds[0]);
+          await refreshAll();
+        },
+      };
+    } catch (error) {
+      rollbackFileRecordRemoval(snapshot);
+      throw error;
+    }
+  };
+
   const trashFilesBatch = async (fileIds) => {
     for (const fileId of normalizeIdList(fileIds)) {
       await moveFileToTrashApi(fileId);
     }
     await refreshAll();
+  };
+
+  const trashFilesBatchOptimistic = async (fileIds) => {
+    const normalizedIds = normalizeIdList(fileIds);
+    if (!normalizedIds.length) {
+      return null;
+    }
+
+    const snapshot = removeFileRecordsOptimistically(normalizedIds);
+    try {
+      await Promise.all(normalizedIds.map((fileId) => moveFileToTrashApi(fileId)));
+      await refreshAll();
+      return {
+        undo: async () => {
+          await restoreFilesFromTrashApi(normalizedIds);
+          await refreshAll();
+        },
+      };
+    } catch (error) {
+      await restoreFilesFromTrashApi(normalizedIds).catch((restoreError) => {
+        console.error("Trash rollback restore failed:", restoreError);
+      });
+      rollbackFileRecordRemoval(snapshot);
+      throw error;
+    }
   };
 
   const permanentlyDelete = async (fileId) => {
@@ -731,6 +908,23 @@ export const useFileStore = defineStore("file", () => {
     await refreshAll();
   };
 
+  const cancelSharedFilesOptimistic = async (fileIds, recipientEmail) => {
+    const normalizedIds = normalizeIdList(fileIds);
+    const normalizedEmail = String(recipientEmail || "").trim();
+    if (!normalizedIds.length || !normalizedEmail) {
+      return null;
+    }
+
+    await cancelFileSharesApi(normalizedIds, normalizedEmail);
+    await refreshAll();
+    return {
+      undo: async () => {
+        await shareFilesWithUserApi(normalizedIds, normalizedEmail);
+        await refreshAll();
+      },
+    };
+  };
+
   const cancelAllSharedFiles = async (fileIds) => {
     const normalizedIds = normalizeIdList(fileIds);
     if (!normalizedIds.length) {
@@ -739,6 +933,35 @@ export const useFileStore = defineStore("file", () => {
 
     await cancelAllFileSharesApi(normalizedIds);
     await refreshAll();
+  };
+
+  const cancelAllSharedFilesOptimistic = async (fileRefs) => {
+    const refs = Array.isArray(fileRefs) ? fileRefs : [fileRefs];
+    const normalizedIds = normalizeIdList(refs.map((file) => (typeof file === "object" ? (file?.id ?? file?.idx) : file)));
+    if (!normalizedIds.length) {
+      return null;
+    }
+
+    const recipientsByFileId = await collectShareRecipients(refs);
+    const snapshot = removeFileRecordsOptimistically(normalizedIds, {
+      includeAllFiles: false,
+      includeDrivePage: false,
+      includeSentSharedFiles: true,
+    });
+
+    try {
+      await cancelAllFileSharesApi(normalizedIds);
+      await refreshAll();
+      return {
+        canUndo: [...recipientsByFileId.values()].some((emails) => emails.length > 0),
+        undo: async () => {
+          await restoreFileShares(recipientsByFileId);
+        },
+      };
+    } catch (error) {
+      rollbackFileRecordRemoval(snapshot);
+      throw error;
+    }
   };
 
   const fetchShareInfo = async (fileId) => {
@@ -804,7 +1027,9 @@ export const useFileStore = defineStore("file", () => {
     refreshAll,
     createFolder,
     moveToTrash,
+    moveToTrashOptimistic,
     trashFilesBatch,
+    trashFilesBatchOptimistic,
     restoreFromTrash,
     restoreFilesBatch,
     permanentlyDelete,
@@ -819,7 +1044,9 @@ export const useFileStore = defineStore("file", () => {
     setFilesLocked,
     shareFiles,
     cancelSharedFiles,
+    cancelSharedFilesOptimistic,
     cancelAllSharedFiles,
+    cancelAllSharedFilesOptimistic,
     fetchShareInfo,
     saveSharedFileToDrive,
     fetchFolderProperties,
