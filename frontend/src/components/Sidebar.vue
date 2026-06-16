@@ -305,27 +305,32 @@ const handleAction = async (action, idx) => {
           <div class="border-t border-[var(--border-color)] my-4 mx-2"></div>
 
           <div>
-            <div @click="isPersonalOpen = !isPersonalOpen" class="flex items-center justify-between px-4 py-2 cursor-pointer rounded-lg transition-colors duration-200 hover:bg-[var(--bg-input)] group">
-              <h3 class="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">개인 페이지</h3>
-              <div class="flex items-center gap-2">
-                <RouterLink :to="{ name: 'workspace' }" @click.stop>
-                  <button class="p-1 rounded hover:bg-gray-200 text-[var(--text-muted)] hover:text-blue-500 transition-colors">
-                    <i class="fa-solid fa-plus text-[10px]"></i>
-                  </button>
-                </RouterLink>
-                <span class="text-xs text-[var(--text-muted)] transition-transform duration-200" :class="{ 'rotate-180': !isPersonalOpen }">▼</span>
-              </div>
+            <div class="flex items-center justify-between px-4 py-2 rounded-lg transition-colors duration-200 hover:bg-[var(--bg-input)] group">
+              <button
+                type="button"
+                @click="isPersonalOpen = !isPersonalOpen"
+                :aria-expanded="isPersonalOpen"
+                class="flex flex-1 min-w-0 items-center justify-between gap-2 text-left cursor-pointer"
+              >
+                <h3 class="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">개인 페이지</h3>
+                <span class="text-xs text-[var(--text-muted)] transition-transform duration-200" aria-hidden="true" :class="{ 'rotate-180': !isPersonalOpen }">▼</span>
+              </button>
+              <RouterLink :to="{ name: 'workspace' }" @click.stop class="ml-2 shrink-0">
+                <button type="button" aria-label="새 워크스페이스 만들기" class="p-1 rounded hover:bg-gray-200 text-[var(--text-muted)] hover:text-blue-500 transition-colors">
+                  <i class="fa-solid fa-plus text-[10px]" aria-hidden="true"></i>
+                </button>
+              </RouterLink>
             </div>
 
             <div v-show="isPersonalOpen" class="mt-1 space-y-1 px-2">
               <template v-if="personalItems.length > 0">
-                <div v-for="item in personalItems" :key="item.post_idx" @click="goToPost(item.post_idx)" class="group relative px-3 py-2 text-sm text-[var(--text-secondary)] rounded-xl cursor-pointer flex items-center justify-between transition-all duration-200 hover:bg-[var(--bg-input)] hover:text-[var(--text-main)]">
-                  <div class="flex items-center gap-3 overflow-hidden">
-                    <i class="fa-solid fa-file-lines w-4 text-center opacity-70 flex-shrink-0"></i>
+                <div v-for="item in personalItems" :key="item.post_idx" class="group relative px-3 py-2 text-sm text-[var(--text-secondary)] rounded-xl flex items-center justify-between transition-all duration-200 hover:bg-[var(--bg-input)] hover:text-[var(--text-main)]">
+                  <button type="button" @click="goToPost(item.post_idx)" class="flex flex-1 min-w-0 items-center gap-3 overflow-hidden text-left cursor-pointer">
+                    <i class="fa-solid fa-file-lines w-4 text-center opacity-70 flex-shrink-0" aria-hidden="true"></i>
                     <span class="truncate">{{ item.title }}</span>
-                  </div>
-                  <button @click="toggleMenu($event, item.post_idx)" class="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-all">
-                    <i class="fa-solid fa-ellipsis text-xs"></i>
+                  </button>
+                  <button type="button" @click="toggleMenu($event, item.post_idx)" :aria-label="`${item.title} 더보기`" aria-haspopup="true" :aria-expanded="openMenuId === item.post_idx" class="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-all">
+                    <i class="fa-solid fa-ellipsis text-xs" aria-hidden="true"></i>
                   </button>
                   <div v-if="openMenuId === item.post_idx" class="absolute right-2 top-10 w-32 bg-[var(--bg-main)] border border-[var(--border-color)] rounded-lg shadow-xl z-[110] py-1 overflow-hidden">
                     <button v-if="item.level === 'ADMIN'" @click.stop="handleAction('share', item.post_idx)" class="w-full text-left px-4 py-2 text-xs hover:bg-[var(--bg-input)] transition-colors flex items-center gap-2">
@@ -351,19 +356,24 @@ const handleAction = async (action, idx) => {
           </div>
 
           <div>
-            <div @click="isSharedOpen = !isSharedOpen" class="flex items-center justify-between px-4 py-2 cursor-pointer rounded-lg transition-colors duration-200 hover:bg-[var(--bg-input)]">
+            <button
+              type="button"
+              @click="isSharedOpen = !isSharedOpen"
+              :aria-expanded="isSharedOpen"
+              class="w-full flex items-center justify-between px-4 py-2 cursor-pointer rounded-lg transition-colors duration-200 hover:bg-[var(--bg-input)] text-left"
+            >
               <h3 class="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">협업 페이지</h3>
-              <span class="text-xs text-[var(--text-muted)] transition-transform duration-200" :class="{ 'rotate-180': !isSharedOpen }">▼</span>
-            </div>
+              <span class="text-xs text-[var(--text-muted)] transition-transform duration-200" aria-hidden="true" :class="{ 'rotate-180': !isSharedOpen }">▼</span>
+            </button>
             <div v-show="isSharedOpen" class="mt-1 space-y-1 px-2">
               <template v-if="sharedItems.length > 0">
-                <div v-for="team in sharedItems" :key="team.post_idx" @click="goToPost(team.post_idx)" class="group relative px-3 py-2 text-sm text-[var(--text-secondary)] rounded-xl cursor-pointer flex items-center justify-between transition-all duration-200 hover:bg-[var(--bg-input)] hover:text-[var(--text-main)]">
-                  <div class="flex items-center gap-3 overflow-hidden">
-                    <i class="fa-solid fa-file-lines w-4 text-center opacity-70 flex-shrink-0"></i>
+                <div v-for="team in sharedItems" :key="team.post_idx" class="group relative px-3 py-2 text-sm text-[var(--text-secondary)] rounded-xl flex items-center justify-between transition-all duration-200 hover:bg-[var(--bg-input)] hover:text-[var(--text-main)]">
+                  <button type="button" @click="goToPost(team.post_idx)" class="flex flex-1 min-w-0 items-center gap-3 overflow-hidden text-left cursor-pointer">
+                    <i class="fa-solid fa-file-lines w-4 text-center opacity-70 flex-shrink-0" aria-hidden="true"></i>
                     <span class="truncate">{{ team.title }}</span>
-                  </div>
-                  <button @click="toggleMenu($event, team.post_idx)" class="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-all">
-                    <i class="fa-solid fa-ellipsis text-xs"></i>
+                  </button>
+                  <button type="button" @click="toggleMenu($event, team.post_idx)" :aria-label="`${team.title} 더보기`" aria-haspopup="true" :aria-expanded="openMenuId === team.post_idx" class="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-all">
+                    <i class="fa-solid fa-ellipsis text-xs" aria-hidden="true"></i>
                   </button>
                   <div v-if="openMenuId === team.post_idx" class="absolute right-2 top-10 w-32 bg-[var(--bg-main)] border border-[var(--border-color)] rounded-lg shadow-xl z-[110] py-1 overflow-hidden">
                     <button v-if="team.level === 'ADMIN'" @click.stop="handleAction('share', team.post_idx)" class="w-full text-left px-4 py-2 text-xs hover:bg-[var(--bg-input)] transition-colors flex items-center gap-2">
@@ -426,11 +436,14 @@ const handleAction = async (action, idx) => {
 
     <button
       @click="toggleSidebar"
+      type="button"
       class="sidebar-toggle absolute top-4 z-50 flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border-color)] bg-[var(--bg-elevated)] text-[var(--text-main)] shadow-lg transition-all duration-300 hover:bg-[var(--bg-input)]"
       :style="sidebarToggleStyle"
       :title="isSidebarOpen ? '사이드바 숨기기' : '사이드바 보이기'"
+      :aria-label="isSidebarOpen ? '사이드바 숨기기' : '사이드바 보이기'"
+      :aria-expanded="isSidebarOpen"
     >
-      <i class="fas transition-transform duration-300" :class="isSidebarOpen ? 'fa-chevron-left' : 'fa-chevron-right'"></i>
+      <i class="fas transition-transform duration-300" :class="isSidebarOpen ? 'fa-chevron-left' : 'fa-chevron-right'" aria-hidden="true"></i>
     </button>
   </div>
 </template>

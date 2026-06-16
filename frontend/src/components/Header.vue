@@ -822,8 +822,15 @@ onBeforeUnmount(() => {
 
       <div class="header-actions">
         <div class="relative" id="notif-container">
-          <button @click="toggleNotifMenu" class="icon-button bell-button">
-            <i class="fa-solid fa-bell"></i>
+          <button
+            @click="toggleNotifMenu"
+            class="icon-button bell-button"
+            type="button"
+            aria-label="알림"
+            aria-haspopup="true"
+            :aria-expanded="showNotifDropdown"
+          >
+            <i class="fa-solid fa-bell" aria-hidden="true"></i>
             <span v-if="hasNewNotif" class="notif-badge"></span>
           </button>
 
@@ -875,8 +882,8 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <button @click="handleToggleTheme" class="icon-button theme-button" :title="isDarkMode ? '라이트 모드로 변경' : '다크 모드로 변경'"><i :class="themeIcon" class="theme-icon"></i></button>
-        <button @click="handleToggleChat" class="icon-button chat-button" title="작업 채팅"><i class="fa-solid fa-comments"></i></button>
+        <button @click="handleToggleTheme" class="icon-button theme-button" type="button" :title="isDarkMode ? '라이트 모드로 변경' : '다크 모드로 변경'" :aria-label="isDarkMode ? '라이트 모드로 변경' : '다크 모드로 변경'"><i :class="themeIcon" class="theme-icon" aria-hidden="true"></i></button>
+        <button @click="handleToggleChat" class="icon-button chat-button" type="button" title="작업 채팅" aria-label="작업 채팅"><i class="fa-solid fa-comments" aria-hidden="true"></i></button>
 
         <div class="relative" id="profile-container">
           <button @click="toggleProfileMenu" class="profile-trigger">

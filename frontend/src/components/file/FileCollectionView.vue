@@ -812,7 +812,9 @@ const onDropToParentNavigator = async (event) => {
                 </svg>
               </div>
             </td>
-            <td class="px-6 py-4 text-sm font-semibold text-gray-900">../</td>
+            <td class="px-6 py-4 text-sm font-semibold text-gray-900">
+              <button type="button" @click.stop="fileStore.goBack()" class="text-left hover:underline cursor-pointer">../</button>
+            </td>
             <td class="px-6 py-4 text-sm text-gray-500">상위 폴더</td>
             <td class="px-6 py-4 text-sm text-gray-500">-</td>
             <td class="px-6 py-4 text-sm text-gray-500">-</td>
@@ -883,7 +885,7 @@ const onDropToParentNavigator = async (event) => {
 
             <td class="px-6 py-4">
               <div class="min-w-0">
-                <p class="file-entry__title truncate text-sm font-semibold text-gray-900">{{ getFileName(file) }}</p>
+                <button type="button" @click.stop="handlePrimaryAction(file)" class="file-entry__title block max-w-full truncate text-left text-sm font-semibold text-gray-900 hover:underline cursor-pointer">{{ getFileName(file) }}</button>
                 <p class="mt-1 truncate text-xs text-gray-400">
                   {{ file.sharedWithMe ? getSharedSourceLabel(file) : (canManageSentShare(file) ? getSentShareLabel(file) : (file.location || '홈')) }}
                 </p>
@@ -1012,7 +1014,7 @@ const onDropToParentNavigator = async (event) => {
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
           </svg>
         </div>
-        <p class="truncate text-sm font-semibold text-gray-900">상위 폴더</p>
+        <button type="button" @click.stop="fileStore.goBack()" class="block max-w-full truncate text-left text-sm font-semibold text-gray-900 hover:underline cursor-pointer">상위 폴더</button>
         <p class="mt-1 text-xs text-gray-400">{{ viewMode === "icon" ? ".." : "../" }}</p>
       </article>
 
@@ -1101,7 +1103,7 @@ const onDropToParentNavigator = async (event) => {
         </div>
 
         <div class="mt-4">
-          <p class="truncate text-sm font-semibold text-gray-900">{{ getFileName(file) }}</p>
+          <button type="button" @click.stop="handlePrimaryAction(file)" class="block max-w-full truncate text-left text-sm font-semibold text-gray-900 hover:underline cursor-pointer">{{ getFileName(file) }}</button>
           <p v-if="viewMode !== 'icon'" class="file-entry__meta mt-1 text-xs text-gray-400">
             {{ file.sharedWithMe ? getSharedSourceLabel(file) : (canManageSentShare(file) ? getSentShareLabel(file) : (file.type === 'folder' ? '폴더' : (getFileExtension(file) || '-').toUpperCase())) }}
           </p>
