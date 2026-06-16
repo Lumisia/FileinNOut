@@ -631,7 +631,8 @@ async function abortUploadedFile(uploadMetas) {
 
   try {
     await abortUpload(payload);
-  } catch {
+  } catch (error) {
+    console.error("Upload abort cleanup failed:", error);
   }
 }
 
@@ -822,8 +823,11 @@ function abortUploadsKeepalive() {
         body: JSON.stringify(payload),
         keepalive: true,
         credentials: "include",
-      }).catch(() => {});
-    } catch {
+      }).catch((error) => {
+        console.error("Upload abort keepalive request failed:", error);
+      });
+    } catch (error) {
+      console.error("Upload abort keepalive setup failed:", error);
     }
   });
 }
@@ -836,7 +840,9 @@ async function handleUpload(event, uploadTypeLabel) {
 
   try {
     if (!fileStore.storageSummary && !fileStore.storageLoading) {
-      await fileStore.fetchStorageSummary().catch(() => {});
+      await fileStore.fetchStorageSummary().catch((error) => {
+        console.error("Upload storage summary fetch failed:", error);
+      });
     }
 
     if (selectedFiles.length > maxUploadCount.value) {
@@ -878,9 +884,13 @@ async function handleUpload(event, uploadTypeLabel) {
 
     if (successList.length > 0) {
       if (fileStore.driveHasLoaded && !fileStore.hasLoaded) {
-        await fileStore.refreshDrivePage().catch(() => {});
+        await fileStore.refreshDrivePage().catch((error) => {
+          console.error("Drive page refresh after upload failed:", error);
+        });
       } else {
-        await fileStore.fetchFiles().catch(() => {});
+        await fileStore.fetchFiles().catch((error) => {
+          console.error("File list refresh after upload failed:", error);
+        });
       }
       emit("upload-complete", successList);
     }
@@ -994,7 +1004,9 @@ onMounted(() => {
   document.addEventListener("keydown", handleKeydown);
   window.addEventListener("beforeunload", handleBeforeUnload);
   window.addEventListener("pagehide", handlePageHide);
-  fileStore.fetchStorageSummary().catch(() => {});
+  fileStore.fetchStorageSummary().catch((error) => {
+    console.error("Upload widget storage summary fetch failed:", error);
+  });
 });
 
 onBeforeUnmount(() => {

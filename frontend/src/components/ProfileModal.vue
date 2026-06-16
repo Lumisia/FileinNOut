@@ -160,7 +160,9 @@ watch(
     imageFeedback.value = "";
     activeTab.value = props.initialTab || "profile";
     if (!fileStore.storageSummary && !fileStore.storageLoading) {
-      fileStore.fetchStorageSummary().catch(() => {});
+      fileStore.fetchStorageSummary().catch((error) => {
+        console.error("Profile storage summary fetch failed:", error);
+      });
     }
   },
 );

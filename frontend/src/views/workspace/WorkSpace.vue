@@ -193,7 +193,7 @@ const handleWorkspaceAssetRealtimeEvent = (payload = {}) => {
     removeWorkspaceAssets(payload.assetIdxList)
     return
   }
-  refreshWorkspaceAssets(workspaceId.value).catch(() => {})
+  void refreshWorkspaceAssets(workspaceId.value)
 }
 
 // ─── STOMP 연결 / 해제 ────────────────────────────────────────────────────────
@@ -249,7 +249,7 @@ const connectWorkspaceAssetRealtime = (targetWorkspaceId = workspaceId.value) =>
           handleWorkspaceAssetRealtimeEvent(payload)
         } catch (error) {
           console.error('Workspace asset realtime payload parse failed:', error)
-          refreshWorkspaceAssets(normalizedWorkspaceId).catch(() => {})
+          void refreshWorkspaceAssets(normalizedWorkspaceId)
         }
       })
     },
@@ -289,6 +289,7 @@ const versionPanelOpen  = ref(false)
 const versions          = ref([])
 const versionPreview    = ref(null)
 const versionsLoading   = ref(false)
+const versionLoadError  = ref('')
 const versionPanelRef   = ref(null)
 useFocusTrap(() => versionPanelOpen.value, versionPanelRef, { onEsc: () => closeVersionPanel() })
 
@@ -300,30 +301,45 @@ const formatVersionDate = (val) => {
   }).format(new Date(val))
 }
 
-const openVersionPanel = async () => {
+const getVersionErrorMessage = (error, fallback) => (
+  error?.response?.data?.message || error?.message || fallback
+)
+
+const loadVersionList = async () => {
   if (!workspaceId.value) return
-  versionPanelOpen.value = true
   versionsLoading.value  = true
+  versionLoadError.value = ''
   try {
     versions.value = await fetchPostVersions(workspaceId.value)
-  } catch {
-    versions.value = []
+  } catch (error) {
+    versionLoadError.value = getVersionErrorMessage(error, '버전 이력을 불러오지 못했습니다.')
   } finally {
     versionsLoading.value = false
   }
 }
 
+const openVersionPanel = async () => {
+  if (!workspaceId.value) return
+  versionPanelOpen.value = true
+  await loadVersionList()
+}
+
+const retryVersionList = () => {
+  void loadVersionList()
+}
+
 const closeVersionPanel = () => {
   versionPanelOpen.value = false
   versionPreview.value   = null
+  versionLoadError.value = ''
 }
 
 const previewVersion = async (versionNum) => {
   if (!workspaceId.value) return
   try {
     versionPreview.value = await fetchPostVersion(workspaceId.value, versionNum)
-  } catch {
-    toast.error('버전을 불러오지 못했습니다.')
+  } catch (error) {
+    toast.error(getVersionErrorMessage(error, '버전을 불러오지 못했습니다.'))
   }
 }
 
@@ -617,7 +633,8 @@ const downloadWorkspaceAsset = async (asset) => {
   if (!asset?.downloadUrl) return
   try {
     await downloadFileAsset(asset, asset.originalName)
-  } catch {
+  } catch (error) {
+    console.error('Workspace asset download failed:', error)
     workspaceAssetError.value = '파일 다운로드에 실패했습니다.'
   }
 }
@@ -885,8 +902,18 @@ onBeforeUnmount(async () => {
             </button>
           </div>
 
-          <div v-if="versionsLoading" class="flex-1 flex items-center justify-center text-xs text-gray-400">
-            불러오는 중...
+          <div v-if="versionsLoading" class="version-skeleton flex-1 px-4 py-4" aria-label="버전 이력을 불러오는 중입니다.">
+            <div v-for="row in [1, 2, 3, 4, 5]" :key="row" class="version-skeleton__row">
+              <span></span>
+              <span></span>
+            </div>
+          </div>
+          <div v-else-if="versionLoadError" class="version-error-panel flex-1 px-4 py-6 text-xs text-rose-600">
+            <p class="font-semibold">버전 이력을 불러오지 못했습니다.</p>
+            <p class="mt-1 break-words">{{ versionLoadError }}</p>
+            <button type="button" class="version-error-panel__button" :disabled="versionsLoading" @click="retryVersionList">
+              {{ versionsLoading ? "다시 시도 중..." : "다시 시도" }}
+            </button>
           </div>
           <div v-else-if="!versions.length" class="flex-1 flex items-center justify-center text-xs text-gray-400">
             저장된 버전이 없습니다.
@@ -1384,6 +1411,62 @@ onBeforeUnmount(async () => {
 .dropdown-item--danger:hover { background: rgba(220, 38, 38, 0.07); }
 
 /* ─── 나머지 기존 스타일 유지 ────────────────────────────────────────────── */
+
+.version-skeleton {
+  display: grid;
+  align-content: start;
+  gap: 0.75rem;
+}
+
+.version-skeleton__row {
+  display: grid;
+  gap: 0.45rem;
+  border-radius: 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--border-color) 72%, transparent);
+  background: color-mix(in srgb, var(--bg-input) 58%, var(--bg-elevated) 42%);
+  padding: 0.8rem;
+}
+
+.version-skeleton__row span {
+  display: block;
+  height: 0.72rem;
+  border-radius: 999px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--border-color) 70%, transparent), color-mix(in srgb, var(--bg-elevated) 88%, transparent), color-mix(in srgb, var(--border-color) 70%, transparent));
+  background-size: 220% 100%;
+  animation: version-skeleton-pulse 1.25s ease-in-out infinite;
+}
+
+.version-skeleton__row span:first-child {
+  width: 46%;
+}
+
+.version-skeleton__row span:last-child {
+  width: 78%;
+}
+
+.version-error-panel__button {
+  margin-top: 0.8rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--danger) 32%, transparent);
+  background: var(--bg-elevated);
+  color: var(--danger);
+  font-weight: 800;
+  padding: 0.48rem 0.8rem;
+}
+
+.version-error-panel__button:hover:not(:disabled) {
+  background: var(--danger-soft);
+}
+
+.version-error-panel__button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+@keyframes version-skeleton-pulse {
+  0% { background-position: 120% 0; }
+  100% { background-position: -120% 0; }
+}
 
 .workspace-assets {
   padding: 20px;

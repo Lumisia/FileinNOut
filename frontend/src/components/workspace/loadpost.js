@@ -78,7 +78,8 @@ const read_post = async (idx) => {
             } else {
                 parsedContents = data.contents;
             }
-        } catch {
+        } catch (error) {
+            console.warn('Workspace post JSON parse failed:', error);
             console.warn('JSON 파싱 실패, 원본 데이터를 사용합니다.');
             parsedContents = data.contents;
         }

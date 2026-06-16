@@ -878,7 +878,8 @@ const abortUploadedFile = async (uploadMetas) => {
 
   try {
     await abortUpload(payload)
-  } catch {
+  } catch (error) {
+    console.error("Upload abort cleanup failed:", error)
   }
 }
 
@@ -1134,7 +1135,9 @@ const handleUpload = async (event, uploadTypeLabel) => {
   if (!selectedFiles.length) return
 
   if (!fileStore.storageSummary && !fileStore.storageLoading) {
-    await fileStore.fetchStorageSummary().catch(() => {})
+    await fileStore.fetchStorageSummary().catch((error) => {
+      console.error("Upload storage summary fetch failed:", error)
+    })
   }
 
   if (selectedFiles.length > maxUploadCount.value) {
@@ -1229,9 +1232,13 @@ const handleUpload = async (event, uploadTypeLabel) => {
 
     uploadedFiles.value = successList
     if (fileStore.driveHasLoaded && !fileStore.hasLoaded) {
-      await fileStore.refreshDrivePage().catch(() => {})
+      await fileStore.refreshDrivePage().catch((error) => {
+        console.error("Drive page refresh after upload failed:", error)
+      })
     } else {
-      await fileStore.fetchFiles().catch(() => {})
+      await fileStore.fetchFiles().catch((error) => {
+        console.error("File list refresh after upload failed:", error)
+      })
     }
     emit("upload-complete", uploadedFiles.value)
     console.log(`[${uploadTypeLabel}] 업로드 완료:`, uploadedFiles.value)

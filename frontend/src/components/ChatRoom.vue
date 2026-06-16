@@ -160,7 +160,9 @@ const handleDriveFileShare = async (e) => {
         lastModified: Number(file.lastModified ?? 0) || 0,
       })
     } catch (uploadErr) {
-      await abortUpload({ finalObjectKey: firstItem.finalObjectKey, chunkObjectKeys }).catch(() => {})
+      await abortUpload({ finalObjectKey: firstItem.finalObjectKey, chunkObjectKeys }).catch((error) => {
+        console.error("Chat upload abort cleanup failed:", error)
+      })
       throw uploadErr
     }
 
@@ -640,7 +642,9 @@ onMounted(async () => {
 onUnmounted(() => {
   window.removeEventListener('click', closeMessageMenu)
   window.removeEventListener('keydown', handleWindowKeydown)
-  leaveRoomPresence().catch(() => {})
+  leaveRoomPresence().catch((error) => {
+    console.error("Leave room presence cleanup failed:", error)
+  })
   if (scrollObserver.value) scrollObserver.value.disconnect()
   if (stompClient) stompClient.disconnect()
 })
