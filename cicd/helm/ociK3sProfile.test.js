@@ -69,6 +69,18 @@ test('OCI k3s chart deploys MinIO for the minio storage provider', () => {
   assert.match(source, /wafflebear\.workerScheduling/)
 })
 
+test('environment ConfigMaps render every value as a Kubernetes string', () => {
+  for (const [file, valuesPath] of [
+    ['cicd/helm/templates/backend-configmap.yaml', 'backend'],
+    ['cicd/helm/templates/websocket-server-configmap.yaml', 'websocket'],
+  ]) {
+    const source = readRepoFile(file)
+    assert.doesNotMatch(source, /tpl \(toYaml \.Values\.[^)]+\.env\)/)
+    assert.match(source, new RegExp(`range \\$key, \\$value := \\.Values\\.${valuesPath}\\.env`))
+    assert.match(source, /tpl \(toString \$value\) \$ \| quote/)
+  }
+})
+
 test('Helm templates can render standard Deployments without Argo Rollouts', () => {
   for (const file of [
     'cicd/helm/templates/backend-deployment.yaml',
