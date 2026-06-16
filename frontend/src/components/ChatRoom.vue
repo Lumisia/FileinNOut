@@ -6,10 +6,12 @@ import SockJS from 'sockjs-client'
 import Stomp from 'stompjs'
 import { apiPath } from '@/utils/backendUrl'
 import { initUploadFiles, completeUpload, abortUpload } from '@/api/filesApi'
+import { useToastStore } from '@/stores/useToastStore'
 
 const props = defineProps({ room: Object, currentUser: Object })
 const emit = defineEmits(['back', 'open-invite', 'room-preview-update'])
 const authStore = useAuthStore()
+const toast = useToastStore()
 
 const chatMessages = ref([])
 const newMessage = ref('')
@@ -103,7 +105,7 @@ const downloadSharedFile = async (message) => {
     anchor.click()
     anchor.remove()
   } catch (e) {
-    alert('파일 다운로드에 실패했습니다. 파일이 삭제되었거나 권한이 없을 수 있습니다.')
+    toast.error('파일 다운로드에 실패했습니다. 파일이 삭제되었거나 권한이 없을 수 있습니다.')
   }
 }
 
@@ -158,7 +160,9 @@ const handleDriveFileShare = async (e) => {
         lastModified: Number(file.lastModified ?? 0) || 0,
       })
     } catch (uploadErr) {
-      await abortUpload({ finalObjectKey: firstItem.finalObjectKey, chunkObjectKeys }).catch(() => {})
+      await abortUpload({ finalObjectKey: firstItem.finalObjectKey, chunkObjectKeys }).catch((error) => {
+        console.error("Chat upload abort cleanup failed:", error)
+      })
       throw uploadErr
     }
 
@@ -195,7 +199,7 @@ const handleDriveFileShare = async (e) => {
 
     await api.post(`/chat/${props.room.id}/file-share`, payload)
   } catch (err) {
-    alert('드라이브 파일 공유에 실패했습니다.')
+    toast.error('드라이브 파일 공유에 실패했습니다.')
   }
 
   e.target.value = ''
@@ -473,7 +477,7 @@ const handleFileSelect = async (e) => {
   const maxSize = isImage ? 5 * 1024 * 1024 : 30 * 1024 * 1024
 
   if (file.size > maxSize) {
-    alert(isImage ? '이미지는 5MB 이하만 업로드 가능합니다.' : '파일은 30MB 이하만 업로드 가능합니다.')
+    toast.warning(isImage ? '이미지는 5MB 이하만 업로드 가능합니다.' : '파일은 30MB 이하만 업로드 가능합니다.')
     return
   }
 
@@ -523,7 +527,7 @@ const handleFileSelect = async (e) => {
       })
     )
   } catch (e) {
-    alert('파일 업로드에 실패했습니다.')
+    toast.error('파일 업로드에 실패했습니다.')
   }
 
   e.target.value = '' // 같은 파일 재업로드 가능하도록
@@ -620,7 +624,7 @@ const deleteMessage = async () => {
     closeMessageMenu()
   } catch (error) {
     console.error('메시지 삭제 실패:', error.response?.status, error.response?.data, error)
-    alert('메시지 삭제에 실패했습니다.')
+    toast.error('메시지 삭제에 실패했습니다.')
   }
 }
 
@@ -638,7 +642,9 @@ onMounted(async () => {
 onUnmounted(() => {
   window.removeEventListener('click', closeMessageMenu)
   window.removeEventListener('keydown', handleWindowKeydown)
-  leaveRoomPresence().catch(() => {})
+  leaveRoomPresence().catch((error) => {
+    console.error("Leave room presence cleanup failed:", error)
+  })
   if (scrollObserver.value) scrollObserver.value.disconnect()
   if (stompClient) stompClient.disconnect()
 })

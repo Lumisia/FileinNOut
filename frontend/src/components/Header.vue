@@ -23,6 +23,9 @@ import { registerPushNotification } from "@/utils/pushNotification";
 import ProfileModal from "./ProfileModal.vue";
 import GamesHubModal from "@/components/games/GamesHubModal.vue";
 import postApi from "@/api/postApi";
+import { useToastStore } from "@/stores/useToastStore";
+import { useDialog } from "@/composables/useDialog";
+import { removeItemsByKeys, restoreRemovedItems } from "@/utils/optimisticList.js";
 
 const emit = defineEmits(["toggle-chat", "toggle-theme", "switch-view"]);
 
@@ -31,6 +34,8 @@ const route = useRoute();
 const authStore = useAuthStore();
 const fileStore = useFileStore();
 const headerSearchStore = useHeaderSearchStore();
+const toast = useToastStore();
+const { confirm } = useDialog();
 
 const showNotifDropdown = ref(false);
 const showProfileDropdown = ref(false);
@@ -51,6 +56,7 @@ const CACHE_TTL_MS = 2 * 60 * 1000; // 2분
 
 let broadcastChannel = null;
 let sseEventSource = null;
+const pendingNotificationDeletes = new Map();
 
 const isDarkMode = ref(false);
 const themeIcon = ref("fa-solid fa-moon");
@@ -236,6 +242,22 @@ const chatNotificationDedupeKey = (notification) => {
     : `title_${notification.title}`;
 };
 
+const notificationListKey = (notification = {}) => {
+  if (notification.type === "chat") {
+    const chatKey = chatNotificationDedupeKey(notification);
+    if (chatKey) return `chat:${chatKey}`;
+  }
+
+  const stableId = notification.serverRowId ?? notification.id ?? notification.uuid;
+  if (stableId != null) return `notification:${stableId}`;
+
+  return `notification:${notification.title || "untitled"}:${notification.createdAt || notification.time || ""}`;
+};
+
+const filterPendingNotificationDeletes = (items) => (
+  items.filter((item) => !pendingNotificationDeletes.has(notificationListKey(item)))
+);
+
 // ─── 서버 조회 (최소화) ───────────────────────────────────────────────────────
 // 호출 시점: ① 로그인 직후 1회  ② 드롭다운 열 때 (캐시 만료 시만)
 //            ③ 수락/거절 직후 상태 동기화
@@ -275,7 +297,7 @@ const fetchNotifications = async () => {
       return notification.type === "chat" && key != null && !serverChatKeys.has(key);
     });
 
-    notifications.value = [...clientOnlyChats, ...grouped];
+    notifications.value = filterPendingNotificationDeletes([...clientOnlyChats, ...grouped]);
     lastFetchedAt.value = Date.now();
     updateNotifBadge();
   } catch (error) {
@@ -295,6 +317,9 @@ const pushNewNotification = (data) => {
   if (data.type && !allowed.includes(data.type)) return;
 
   const incoming = toNotificationItem({ ...data, read: false });
+  if (pendingNotificationDeletes.has(notificationListKey(incoming))) {
+    return;
+  }
 
   const existingIndex = findNotificationIndex(incoming);
   if (existingIndex >= 0) {
@@ -388,11 +413,11 @@ const handleInviteVerify = async (notification, type) => {
     await fetchNotifications();
 
     if (type === "accept" && message.includes("유효하지 않은 토큰")) {
-      alert("이미 처리되었거나 만료된 초대입니다.");
+      toast.warning("이미 처리되었거나 만료된 초대입니다.");
       return;
     }
 
-    alert(message || (type === "accept" ? "초대 수락에 실패했습니다." : "초대 거절에 실패했습니다."));
+    toast.error(message || (type === "accept" ? "초대 수락에 실패했습니다." : "초대 거절에 실패했습니다."));
   }
 };
 
@@ -412,7 +437,7 @@ const handleGroupInviteAction = async (notification, type) => {
   } catch (error) {
     console.error(type === "accept" ? "그룹 초대 수락 실패:" : "그룹 초대 거절 실패:", error);
     await fetchNotifications();
-    alert(getErrorMessage(error) || (type === "accept" ? "그룹 초대 수락에 실패했습니다." : "그룹 초대 거절에 실패했습니다."));
+    toast.error(getErrorMessage(error) || (type === "accept" ? "그룹 초대 수락에 실패했습니다." : "그룹 초대 거절에 실패했습니다."));
   }
 };
 
@@ -432,7 +457,7 @@ const handleRelationshipInviteAction = async (notification, type) => {
   } catch (error) {
     console.error(type === "accept" ? "연결 초대 수락 실패:" : "연결 초대 거절 실패:", error);
     await fetchNotifications();
-    alert(getErrorMessage(error) || (type === "accept" ? "연결 초대 수락에 실패했습니다." : "연결 초대 거절에 실패했습니다."));
+    toast.error(getErrorMessage(error) || (type === "accept" ? "연결 초대 수락에 실패했습니다." : "연결 초대 거절에 실패했습니다."));
   }
 };
 
@@ -469,33 +494,84 @@ const handleNotificationClick = async (notification) => {
   }));
 };
 
-const handleDeleteNotification = async (notification) => {
-  try {
-    if (notification.type === "chat") {
-      const index = findNotificationIndex(notification);
-      if (index >= 0) {
-        notifications.value.splice(index, 1);
-      }
-      updateNotifBadge();
-      return;
-    }
+const restorePendingNotificationDelete = (key) => {
+  const pending = pendingNotificationDeletes.get(key);
+  if (!pending) return;
 
-    if (notification?.id || notification?.uuid) {
+  if (pending.timerId) {
+    window.clearTimeout(pending.timerId);
+  }
+  pendingNotificationDeletes.delete(key);
+  notifications.value = restoreRemovedItems(notifications.value, pending.removedEntries, notificationListKey);
+  updateNotifBadge();
+};
+
+const commitPendingNotificationDelete = async (key) => {
+  const pending = pendingNotificationDeletes.get(key);
+  if (!pending) return;
+
+  if (pending.timerId) {
+    window.clearTimeout(pending.timerId);
+  }
+  pendingNotificationDeletes.delete(key);
+
+  const notification = pending.notification;
+  if (notification.type === "chat") {
+    return;
+  }
+
+  try {
+    if (notification?.id || notification?.serverRowId || notification?.uuid) {
       await postApi.deleteNotification({
-        id: notification.id ?? null,
+        id: notification.serverRowId ?? notification.id ?? null,
         uuid: notification.uuid ?? null,
       });
     }
-
-    notifications.value = notifications.value.filter((item) => (
-      !(notification.id != null && item.id === notification.id) &&
-      !(notification.uuid && item.uuid === notification.uuid)
-    ));
-    updateNotifBadge();
   } catch (error) {
     console.error("알림 삭제 실패:", error);
-    alert("알림 삭제에 실패했습니다.");
+    notifications.value = restoreRemovedItems(notifications.value, pending.removedEntries, notificationListKey);
+    updateNotifBadge();
+    toast.error("알림 삭제에 실패했습니다.");
   }
+};
+
+const handleDeleteNotification = (notification) => {
+  const key = notificationListKey(notification);
+  if (pendingNotificationDeletes.has(key)) {
+    return;
+  }
+
+  const result = removeItemsByKeys(notifications.value, [key], notificationListKey);
+  if (!result.removedEntries.length) {
+    return;
+  }
+
+  notifications.value = result.nextItems;
+  updateNotifBadge();
+
+  const timerId = window.setTimeout(() => {
+    void commitPendingNotificationDelete(key);
+  }, 8000);
+
+  pendingNotificationDeletes.set(key, {
+    notification: { ...notification },
+    removedEntries: result.removedEntries,
+    timerId,
+  });
+
+  toast.success("알림을 삭제했습니다.", {
+    timeout: 8000,
+    action: {
+      label: "실행 취소",
+      handler: () => restorePendingNotificationDelete(key),
+    },
+  });
+};
+
+const flushPendingNotificationDeletes = () => {
+  [...pendingNotificationDeletes.keys()].forEach((key) => {
+    void commitPendingNotificationDelete(key);
+  });
 };
 
 const swDirectMessageHandler = (event) => {
@@ -547,7 +623,8 @@ const loadSettingsProfile = async () => {
   isSettingsLoading.value = true;
   try {
     settingsProfile.value = await fetchSettingsProfile();
-  } catch {
+  } catch (error) {
+    console.error("Settings profile fetch failed:", error);
     settingsProfile.value = null;
   } finally {
     isSettingsLoading.value = false;
@@ -596,6 +673,22 @@ const handleToggleTheme = () => {
   emit("toggle-theme", isDarkMode.value);
 };
 
+const handleStorageSummaryError = (error, context = "storage summary") => {
+  console.error(`${context} fetch failed:`, error);
+};
+
+const ensureStorageSummary = async (context) => {
+  if (fileStore.storageSummary || fileStore.storageLoading) {
+    return;
+  }
+
+  try {
+    await fileStore.fetchStorageSummary();
+  } catch (error) {
+    handleStorageSummaryError(error, context);
+  }
+};
+
 const openSettings = async (tab = "profile") => {
   settingsTab.value = tab;
   showProfileDropdown.value = false;
@@ -604,13 +697,7 @@ const openSettings = async (tab = "profile") => {
 };
 
 const openGamesHub = async () => {
-  if (!fileStore.storageSummary && !fileStore.storageLoading) {
-    try {
-      await fileStore.fetchStorageSummary();
-    } catch (error) {
-      console.error("게임 권한 확인 실패:", error);
-    }
-  }
+  await ensureStorageSummary("games permission");
 
   if (!canUseGames.value) {
     return;
@@ -633,7 +720,7 @@ const handleSavedProfile = (savedProfile) => {
 };
 
 const handleLogout = async () => {
-  if (confirm("로그아웃 하시겠습니까?")) {
+  if (await confirm({ title: "로그아웃", message: "로그아웃 하시겠습니까?", confirmText: "로그아웃" })) {
     await authStore.logout();
     router.push("/login");
   }
@@ -675,7 +762,9 @@ const startSse = () => {
     try {
       const payload = JSON.parse(e.data);
       window.dispatchEvent(new CustomEvent("sse-chat-preview-update", { detail: payload }));
-    } catch {}
+    } catch (error) {
+      console.warn("SSE chat preview payload parse failed:", error);
+    }
   });
 
   sseEventSource.onerror = () => {
@@ -705,9 +794,7 @@ watch(
     await fetchNotifications();
     startSse();
 
-    if (!fileStore.storageSummary && !fileStore.storageLoading) {
-      fileStore.fetchStorageSummary().catch(() => {});
-    }
+    void ensureStorageSummary("authenticated header");
 
     try {
       await registerPushNotification();
@@ -723,14 +810,13 @@ onMounted(() => {
   authStore.checkLogin();
   loadSettingsProfile();
   setupNotificationChannel();
-  if (!fileStore.storageSummary && !fileStore.storageLoading) {
-    fileStore.fetchStorageSummary().catch(() => {});
-  }
+  void ensureStorageSummary("header mount");
   document.addEventListener("click", handleClickOutside);
 });
 
 onBeforeUnmount(() => {
   document.removeEventListener("click", handleClickOutside);
+  flushPendingNotificationDeletes();
   if (broadcastChannel) {
     broadcastChannel.close();
     broadcastChannel = null;
@@ -818,8 +904,15 @@ onBeforeUnmount(() => {
 
       <div class="header-actions">
         <div class="relative" id="notif-container">
-          <button @click="toggleNotifMenu" class="icon-button bell-button">
-            <i class="fa-solid fa-bell"></i>
+          <button
+            @click="toggleNotifMenu"
+            class="icon-button bell-button"
+            type="button"
+            aria-label="알림"
+            aria-haspopup="true"
+            :aria-expanded="showNotifDropdown"
+          >
+            <i class="fa-solid fa-bell" aria-hidden="true"></i>
             <span v-if="hasNewNotif" class="notif-badge"></span>
           </button>
 
@@ -871,8 +964,8 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <button @click="handleToggleTheme" class="icon-button theme-button" :title="isDarkMode ? '라이트 모드로 변경' : '다크 모드로 변경'"><i :class="themeIcon" class="theme-icon"></i></button>
-        <button @click="handleToggleChat" class="icon-button chat-button" title="작업 채팅"><i class="fa-solid fa-comments"></i></button>
+        <button @click="handleToggleTheme" class="icon-button theme-button" type="button" :title="isDarkMode ? '라이트 모드로 변경' : '다크 모드로 변경'" :aria-label="isDarkMode ? '라이트 모드로 변경' : '다크 모드로 변경'"><i :class="themeIcon" class="theme-icon" aria-hidden="true"></i></button>
+        <button @click="handleToggleChat" class="icon-button chat-button" type="button" title="작업 채팅" aria-label="작업 채팅"><i class="fa-solid fa-comments" aria-hidden="true"></i></button>
 
         <div class="relative" id="profile-container">
           <button @click="toggleProfileMenu" class="profile-trigger">
@@ -910,72 +1003,6 @@ onBeforeUnmount(() => {
 
 
 <style scoped>
-.header-container {
-  min-height: 4rem;
-  background-color: var(--bg-main);
-  border-bottom: 1px solid var(--border-color);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0 clamp(1rem, 2vw, 2rem);
-  transition: background-color 0.3s ease, border-color 0.3s ease;
-}
-
-.header-search-wrap {
-  position: relative;
-  flex: 1 1 22rem;
-  max-width: min(42rem, 55vw);
-  min-width: 0;
-}
-
-.search-input {
-  width: 100%;
-  background-color: var(--bg-input);
-  border: none;
-  border-radius: 1rem;
-  padding: 0.7rem 1rem 0.7rem 3rem;
-  outline: none;
-  font-size: 0.875rem;
-  color: var(--text-main);
-  transition: all 0.2s ease;
-}
-
-.search-input:focus {
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
-  background-color: var(--bg-main);
-}
-
-.search-input::placeholder {
-  color: var(--text-muted);
-}
-
-.search-icon {
-  position: absolute;
-  left: 1rem;
-  top: 0.78rem;
-  opacity: 0.45;
-}
-
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: clamp(0.65rem, 1vw, 1.1rem);
-  margin-left: auto;
-  min-width: max-content;
-}
-
-.icon-button {
-  color: var(--text-muted);
-  transition: color 0.2s ease, background-color 0.2s ease;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0.5rem;
-  border-radius: 0.75rem;
-  position: relative;
-}
-
 .notif-badge {
   position: absolute;
   top: 6px;
@@ -1134,227 +1161,18 @@ onBeforeUnmount(() => {
 
 .notif-time {
   font-size: 0.65rem;
-  color: #999;
+  color: var(--text-secondary);
+  font-weight: 600;
   margin-top: 2px;
-}
-
-@keyframes bell-swing {
-  0%, 100% { transform: rotate(0deg); }
-  15% { transform: rotate(14deg); }
-  30% { transform: rotate(-10deg); }
-  45% { transform: rotate(7deg); }
-  60% { transform: rotate(-5deg); }
-  75% { transform: rotate(2deg); }
-}
-
-.bell-button:hover,
-.theme-button:hover,
-.chat-button:hover {
-  background-color: var(--bg-input);
-  color: var(--text-main);
-}
-
-.bell-button:hover i {
-  animation: bell-swing 0.7s ease-in-out infinite;
-  transform-origin: top center;
-}
-
-.theme-icon {
-  transition: transform 0.2s ease;
-}
-
-.theme-button:hover .theme-icon {
-  transform: scale(1.08);
-}
-
-.profile-trigger {
-  display: flex;
-  align-items: center;
-  gap: 0.8rem;
-  border-radius: 1rem;
-  padding: 0.25rem 0.35rem 0.25rem 0.6rem;
-  transition: background-color 0.18s ease;
-  max-width: min(18rem, 32vw);
-}
-
-.profile-trigger:hover {
-  background: var(--bg-input);
-}
-
-.profile-trigger__copy {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  min-width: 0;
-}
-
-.profile-trigger__name {
-  font-size: 0.95rem;
-  font-weight: 800;
-  color: var(--text-main);
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.profile-trigger__plan {
-  margin-top: 0.1rem;
-  font-size: 0.68rem;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  color: #44dff4;
-  text-transform: uppercase;
-}
-
-.profile-trigger__avatar {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  width: 2.55rem;
-  height: 2.55rem;
-  border-radius: 0.9rem;
-  background: linear-gradient(135deg, #190094 0%, #2b16c8 100%);
-  color: #fff;
-  font-size: 0.95rem;
-  font-weight: 900;
-  border: 2px solid rgba(68, 223, 244, 0.65);
-  box-shadow: 0 12px 22px rgba(25, 0, 148, 0.14);
-}
-
-.profile-trigger__avatar-image {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.dropdown-container {
-  position: absolute;
-  top: calc(100% + 10px);
-  right: 0;
-  min-width: 248px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-color);
-  border-radius: 18px;
-  box-shadow: var(--shadow-lg);
-  z-index: 50;
-  opacity: 0;
-  transform: translateY(-8px);
-  pointer-events: none;
-  transition: all 0.18s ease;
-}
-
-.dropdown-container.active {
-  opacity: 1;
-  transform: translateY(0);
-  pointer-events: auto;
-}
-
-.dropdown-header {
-  padding: 1rem 1.1rem;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.dropdown-header__label {
-  font-size: 0.82rem;
-  font-weight: 700;
-  color: var(--text-muted);
-}
-
-.dropdown-header__email {
-  margin-top: 0.4rem;
-  font-size: 1.02rem;
-  font-weight: 900;
-  color: var(--text-main);
-  word-break: break-all;
-}
-
-.dropdown-item {
-  width: 100%;
-  padding: 0.9rem 1rem;
-  display: flex;
-  align-items: center;
-  gap: 0.85rem;
-  cursor: pointer;
-  transition: background 0.15s ease;
-  color: var(--text-main);
-  font-size: 0.98rem;
-  font-weight: 700;
-  text-align: left;
-}
-
-.dropdown-item:hover {
-  background: var(--bg-input);
-}
-
-.dropdown-item i {
-  width: 18px;
-  text-align: center;
-  color: var(--text-muted);
-}
-
-.dropdown-muted {
-  font-size: 0.9rem;
-  color: var(--text-muted);
-}
-
-.dropdown-footer {
-  border-top: 1px solid var(--border-color);
-  padding: 0.35rem 0;
-}
-
-.logout-item {
-  color: var(--text-main);
-}
-
-.logout-item i {
-  color: inherit;
-}
-
-@media (max-width: 1080px) {
-  .header-search-wrap {
-    max-width: min(32rem, 48vw);
-  }
-}
-
-@media (max-width: 900px) {
-  .header-container {
-    padding: 0 1rem;
-  }
-  .profile-trigger__copy {
-    display: none;
-  }
-  .profile-trigger {
-    max-width: none;
-  }
-}
-
-@media (max-width: 720px) {
-  .header-container {
-    flex-wrap: wrap;
-    align-items: center;
-    padding-top: 0.75rem;
-    padding-bottom: 0.75rem;
-  }
-  .header-search-wrap {
-    order: 2;
-    flex-basis: 100%;
-    max-width: 100%;
-  }
-  .header-actions {
-    width: 100%;
-    justify-content: flex-end;
-  }
 }
 .header-container { position: relative; min-height: 4rem; background: color-mix(in srgb, var(--bg-main) 92%, var(--bg-secondary) 8%); border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0 clamp(1rem, 2vw, 2rem); transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease; box-shadow: 0 1px 0 color-mix(in srgb, var(--border-color) 72%, transparent); }
 .header-search-wrap { position: relative; flex: 1 1 22rem; max-width: min(44rem, 58vw); min-width: 0; }
-.search-input { width: 100%; background: color-mix(in srgb, var(--bg-elevated) 88%, var(--bg-input) 12%); border: 1px solid var(--border-color); border-radius: 1rem; padding: 0.82rem 8rem 0.82rem 3rem; outline: none; font-size: 0.92rem; color: var(--text-main); box-shadow: var(--shadow-sm); transition: all 0.2s ease; }
+.search-input { width: 100%; background: color-mix(in srgb, var(--bg-elevated) 88%, var(--bg-input) 12%); border: 1px solid var(--border-color); border-radius: 1rem; padding: 0.82rem 8rem 0.82rem 3rem; outline: none; font-size: 0.92rem; color: var(--text-main); box-shadow: var(--shadow-sm); transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, color 0.2s ease; }
 .search-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent), var(--shadow-sm); background-color: var(--bg-main); }
 .search-input:disabled { cursor: not-allowed; opacity: 0.68; }
 .search-input::placeholder { color: var(--text-muted); }
 .search-icon { position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); color: var(--text-muted); opacity: 0.78; }
-.search-filter-button { position: absolute; top: 50%; right: 0.6rem; transform: translateY(-50%); display: inline-flex; align-items: center; gap: 0.45rem; border: 1px solid color-mix(in srgb, var(--border-color) 86%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--bg-main) 68%, var(--bg-input) 32%); color: var(--text-secondary); padding: 0.48rem 0.82rem; font-size: 0.78rem; font-weight: 700; box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-inverse) 8%, transparent); transition: all 0.18s ease; }
+.search-filter-button { position: absolute; top: 50%; right: 0.6rem; transform: translateY(-50%); display: inline-flex; align-items: center; gap: 0.45rem; border: 1px solid color-mix(in srgb, var(--border-color) 86%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--bg-main) 68%, var(--bg-input) 32%); color: var(--text-secondary); padding: 0.48rem 0.82rem; font-size: 0.78rem; font-weight: 700; box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-inverse) 8%, transparent); transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease; }
 .search-filter-button:hover:not(:disabled), .search-filter-button.is-active { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 35%, transparent); color: var(--accent); }
 .search-filter-button.has-filters { background: color-mix(in srgb, var(--accent) 18%, var(--bg-elevated) 82%); border-color: color-mix(in srgb, var(--accent) 38%, transparent); color: var(--accent); }
 .search-filter-button:disabled { cursor: not-allowed; opacity: 0.5; }
@@ -1386,7 +1204,7 @@ onBeforeUnmount(() => {
 .profile-trigger__plan { margin-top: 0.1rem; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.06em; color: var(--accent); text-transform: uppercase; }
 .profile-trigger__avatar { display: inline-flex; align-items: center; justify-content: center; overflow: hidden; width: 2.55rem; height: 2.55rem; border-radius: 0.9rem; background: linear-gradient(135deg, #123d88 0%, #2563eb 100%); color: #fff; font-size: 0.95rem; font-weight: 900; border: 2px solid color-mix(in srgb, var(--accent) 54%, transparent); box-shadow: 0 14px 28px rgba(37, 99, 235, 0.18); }
 .profile-trigger__avatar-image { width: 100%; height: 100%; object-fit: cover; }
-.dropdown-container { position: absolute; top: calc(100% + 10px); right: 0; min-width: 248px; background: color-mix(in srgb, var(--bg-elevated) 95%, var(--bg-main) 5%); border: 1px solid var(--border-color); border-radius: 18px; box-shadow: var(--shadow-lg); z-index: 12000; opacity: 0; transform: translateY(-8px); pointer-events: none; transition: all 0.18s ease; backdrop-filter: blur(18px); }
+.dropdown-container { position: absolute; top: calc(100% + 10px); right: 0; min-width: 248px; background: color-mix(in srgb, var(--bg-elevated) 95%, var(--bg-main) 5%); border: 1px solid var(--border-color); border-radius: 18px; box-shadow: var(--shadow-lg); z-index: 12000; opacity: 0; transform: translateY(-8px); pointer-events: none; transition: opacity 0.18s ease, transform 0.18s ease, background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease; backdrop-filter: blur(18px); }
 .dropdown-container.active { opacity: 1; transform: translateY(0); pointer-events: auto; }
 .dropdown-header { padding: 1rem 1.1rem; border-bottom: 1px solid var(--border-color); }
 .dropdown-header__label { font-size: 0.82rem; font-weight: 700; color: var(--text-muted); }

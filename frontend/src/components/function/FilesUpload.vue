@@ -259,6 +259,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import axios from "axios"
 import { abortUpload, completeUpload, fetchUploadSessions, initUploadFiles, parseUploadResponse } from "@/api/filesApi.js"
 import { useFileStore } from "@/stores/useFileStore"
+import { useDialog } from "@/composables/useDialog"
 
 const isDropdownOpen = ref(false)
 const uploadedFiles = ref([])
@@ -275,6 +276,7 @@ const uploadSessionStartedAt = ref(null)
 const nowTick = ref(Date.now())
 const isCancelRequested = ref(false)
 const fileStore = useFileStore()
+const { prompt } = useDialog()
 const planCapabilities = computed(() => fileStore.planCapabilities)
 const maxUploadCount = computed(() => Number(planCapabilities.value?.maxUploadCount || 30))
 const maxUploadFileBytes = computed(() => Number(planCapabilities.value?.maxUploadFileBytes || 5 * 1024 * 1024 * 1024))
@@ -719,8 +721,8 @@ const dismissUploadPanel = () => {
   uploadPanelVisible.value = false
 }
 
-const createNewFolder = () => {
-  const folderName = prompt("폴더 이름을 입력해 주세요")
+const createNewFolder = async () => {
+  const folderName = await prompt({ title: "새 폴더", label: "폴더 이름", placeholder: "폴더 이름을 입력해 주세요" })
   if (folderName) {
     fileStore.createFolder(folderName).catch((error) => {
       uploadError.value =
@@ -876,7 +878,8 @@ const abortUploadedFile = async (uploadMetas) => {
 
   try {
     await abortUpload(payload)
-  } catch {
+  } catch (error) {
+    console.error("Upload abort cleanup failed:", error)
   }
 }
 
@@ -1132,7 +1135,9 @@ const handleUpload = async (event, uploadTypeLabel) => {
   if (!selectedFiles.length) return
 
   if (!fileStore.storageSummary && !fileStore.storageLoading) {
-    await fileStore.fetchStorageSummary().catch(() => {})
+    await fileStore.fetchStorageSummary().catch((error) => {
+      console.error("Upload storage summary fetch failed:", error)
+    })
   }
 
   if (selectedFiles.length > maxUploadCount.value) {
@@ -1227,9 +1232,13 @@ const handleUpload = async (event, uploadTypeLabel) => {
 
     uploadedFiles.value = successList
     if (fileStore.driveHasLoaded && !fileStore.hasLoaded) {
-      await fileStore.refreshDrivePage().catch(() => {})
+      await fileStore.refreshDrivePage().catch((error) => {
+        console.error("Drive page refresh after upload failed:", error)
+      })
     } else {
-      await fileStore.fetchFiles().catch(() => {})
+      await fileStore.fetchFiles().catch((error) => {
+        console.error("File list refresh after upload failed:", error)
+      })
     }
     emit("upload-complete", uploadedFiles.value)
     console.log(`[${uploadTypeLabel}] 업로드 완료:`, uploadedFiles.value)

@@ -1,15 +1,17 @@
 ﻿<script setup>
 import BaseFileView from "@/components/BaseFileView.vue";
 import { useFileStore } from "@/stores/useFileStore";
+import { useDialog } from "@/composables/useDialog";
 
 const fileStore = useFileStore();
+const { confirm } = useDialog();
 
 const handlePermanentDelete = async (id) => {
   await fileStore.permanentlyDelete(id);
 };
 
 const handleClearTrash = async () => {
-  if (window.confirm("휴지통의 모든 항목을 영구 삭제하시겠습니까?")) {
+  if (await confirm({ title: "휴지통 비우기", message: "휴지통의 모든 항목을 영구 삭제하시겠습니까? 복구할 수 없습니다.", confirmText: "영구 삭제", danger: true })) {
     await fileStore.emptyTrash();
   }
 };
@@ -22,6 +24,9 @@ const handleClearTrash = async () => {
     :show-empty="true"
     delete-mode="permanent"
     :show-folder-navigation="false"
+    empty-icon="fa-regular fa-trash-can"
+    empty-title="휴지통이 비었습니다"
+    empty-description="삭제한 파일이 여기에 표시됩니다. 영구 삭제하면 복구할 수 없어요."
     @delete="handlePermanentDelete"
   >
     <template #header-right>
