@@ -121,7 +121,9 @@ const renderContent = (raw) => {
     if (parsed?.blocks && Array.isArray(parsed.blocks)) {
       return parsed.blocks.map(renderBlock).join('\n')
     }
-  } catch {}
+  } catch (error) {
+    console.warn("Read-only workspace content JSON parse failed:", error)
+  }
 
   // 이미 HTML인 경우 그대로 반환
   if (typeof raw === 'string' && raw.trim().startsWith('<')) {
@@ -194,7 +196,8 @@ const downloadAsset = async (asset) => {
   if (!asset?.downloadUrl) return
   try {
     await downloadFileAsset(asset, asset.originalName)
-  } catch {
+  } catch (error) {
+    console.error("Workspace asset download failed:", error)
     workspaceAssetError.value = '파일 다운로드에 실패했습니다.'
   }
 }

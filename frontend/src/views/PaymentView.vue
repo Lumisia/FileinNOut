@@ -119,7 +119,9 @@ watch(
 
 onMounted(() => {
   if (authStore.token && !fileStore.storageSummary && !fileStore.storageLoading) {
-    fileStore.fetchStorageSummary().catch(() => {});
+    fileStore.fetchStorageSummary().catch((error) => {
+      console.error("Payment storage summary fetch failed:", error);
+    });
   }
 });
 
@@ -221,7 +223,9 @@ const startCheckout = async () => {
 
     paymentStatus.value = { status: "loading", message: "결제 정보를 검증하고 있습니다." };
     await verifyOrder(paymentId, order.orderId);
-    await fileStore.fetchStorageSummary().catch(() => {});
+    await fileStore.fetchStorageSummary().catch((error) => {
+      console.error("Payment storage summary refresh failed:", error);
+    });
     paymentStatus.value = {
       status: "success",
       message: `${product.label} 결제가 완료되었습니다. 플랜 정보가 바로 반영됩니다.`,
