@@ -112,3 +112,20 @@ test('single-node scheduling can disable worker-only affinity', () => {
     assert.match(source, /"labels"\s+\(dict/)
   }
 })
+
+test('app Dockerfiles use ARM64-capable base images for OCI aarch64 nodes', () => {
+  // OCI Ampere A1 nodes are aarch64. eclipse-temurin alpine tags are not published
+  // for arm64 ("no match for platform in manifest"), so the backend image must use a
+  // multi-arch (jammy) Temurin base instead.
+  const backend = readRepoFile('cicd/backend.dockerfile')
+  assert.doesNotMatch(backend, /eclipse-temurin:[^\s]*-alpine/)
+  assert.match(backend, /FROM eclipse-temurin:17-jdk-jammy AS builder/)
+  assert.match(backend, /FROM eclipse-temurin:17-jre-jammy/)
+
+  // node and nginx alpine images are multi-arch (they include arm64), so they are fine.
+  const websocket = readRepoFile('cicd/websocket.dockerfile')
+  assert.match(websocket, /FROM node:/)
+  const frontend = readRepoFile('cicd/frontend.dockerfile')
+  assert.match(frontend, /FROM node:/)
+  assert.match(frontend, /FROM nginx:/)
+})
