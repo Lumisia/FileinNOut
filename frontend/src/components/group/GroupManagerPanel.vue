@@ -16,8 +16,10 @@ import {
   removeRelationshipFromGroup,
   renameGroup,
 } from "@/api/groupApi";
+import { useDialog } from "@/composables/useDialog";
 
 const REQUEST_PAGE_SIZE = 6;
+const { confirm } = useDialog();
 
 const props = defineProps({
   active: {
@@ -323,7 +325,7 @@ const handleRemoveRelationshipFromGroup = async (relationshipId, groupId) => {
 };
 
 const handleDeleteRelationship = async (relationship) => {
-  if (!window.confirm(`${relationship.targetUser?.name || "이 사용자"}와의 연결을 해제하시겠습니까?`)) {
+  if (!(await confirm({ title: "연결 해제", message: `${relationship.targetUser?.name || "이 사용자"}와의 연결을 해제하시겠습니까?`, confirmText: "해제", danger: true }))) {
     return;
   }
 
@@ -372,7 +374,7 @@ const handleRenameGroup = async (groupId) => {
 };
 
 const handleDeleteGroup = async (group) => {
-  if (!window.confirm(`[${group.name}] 그룹을 삭제하시겠습니까?`)) {
+  if (!(await confirm({ title: "그룹 삭제", message: `[${group.name}] 그룹을 삭제하시겠습니까?`, confirmText: "삭제", danger: true }))) {
     return;
   }
 

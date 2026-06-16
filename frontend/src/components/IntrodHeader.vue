@@ -2,8 +2,10 @@
 import { onMounted, computed, ref, onBeforeUnmount } from 'vue';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useRouter } from 'vue-router';
+import { useDialog } from '@/composables/useDialog';
 const authStore = useAuthStore();
 const router = useRouter();
+const { confirm } = useDialog();
 
 // 로그인 여부 및 사용자 정보
 const isLoggedIn = computed(() => !!authStore.token);
@@ -22,7 +24,7 @@ const toggleProfileMenu = () => {
 };
 
 const handleLogout = async () => {
-  if (confirm("로그아웃 하시겠습니까?")) {
+  if (await confirm({ title: "로그아웃", message: "로그아웃 하시겠습니까?", confirmText: "로그아웃" })) {
     await authStore.logout();
     router.push('/login');
   }

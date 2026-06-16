@@ -6,6 +6,7 @@ import { STORAGE_ADDON_PRODUCTS, findMembershipProduct, formatKrw } from "@/cons
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useFileStore } from "@/stores/useFileStore";
 import GroupManagerPanel from "@/components/group/GroupManagerPanel.vue";
+import { useFocusTrap } from "@/composables/useFocusTrap";
 
 const props = defineProps({
   isOpen: {
@@ -29,6 +30,9 @@ const props = defineProps({
 const emit = defineEmits(["close", "saved"]);
 const authStore = useAuthStore();
 const fileStore = useFileStore();
+
+const panelRef = ref(null);
+useFocusTrap(() => props.isOpen, panelRef, { onEsc: () => emit("close") });
 
 const activeTab = ref("profile");
 const groupFocusSection = ref("manage");
@@ -156,7 +160,9 @@ watch(
     imageFeedback.value = "";
     activeTab.value = props.initialTab || "profile";
     if (!fileStore.storageSummary && !fileStore.storageLoading) {
-      fileStore.fetchStorageSummary().catch(() => {});
+      fileStore.fetchStorageSummary().catch((error) => {
+        console.error("Profile storage summary fetch failed:", error);
+      });
     }
   },
 );
@@ -351,11 +357,19 @@ const handleSave = async () => {
 
 <template>
   <div class="settings-overlay" :class="{ active: isOpen }" @click="emit('close')">
-    <div class="settings-modal" @click.stop>
+    <div
+      ref="panelRef"
+      class="settings-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="profile-modal-title"
+      tabindex="-1"
+      @click.stop
+    >
       <header class="settings-modal__header">
         <div>
           <p class="settings-modal__eyebrow">Account Center</p>
-          <h2 class="settings-modal__title">설정</h2>
+          <h2 id="profile-modal-title" class="settings-modal__title">설정</h2>
         </div>
         <button type="button" class="settings-close" @click="emit('close')">
           <i class="fa-solid fa-xmark"></i>
