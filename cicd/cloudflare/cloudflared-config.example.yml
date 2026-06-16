@@ -1,0 +1,17 @@
+tunnel: fileinnout-portfolio
+credentials-file: /etc/cloudflared/fileinnout-portfolio.json
+
+ingress:
+  - hostname: jenkins.example.com
+    service: http://localhost:8081
+  - hostname: app.example.com
+    service: http://localhost:80
+  - hostname: api.example.com
+    service: http://localhost:80
+  - hostname: swagger.example.com
+    service: http://localhost:80
+  - hostname: kiali.example.com
+    service: http://localhost:80
+  - hostname: jaeger.example.com
+    service: http://localhost:80
+  - service: http_status:404

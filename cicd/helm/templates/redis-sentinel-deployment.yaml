@@ -26,7 +26,7 @@ spec:
         app.kubernetes.io/name: redis-sentinel
         app.kubernetes.io/part-of: wafflebear
     spec:
-{{ include "wafflebear.workerScheduling" (dict "app.kubernetes.io/name" "redis-sentinel" "app.kubernetes.io/part-of" "wafflebear") | nindent 6 }}
+{{ include "wafflebear.workerScheduling" (dict "root" . "labels" (dict "app.kubernetes.io/name" "redis-sentinel" "app.kubernetes.io/part-of" "wafflebear")) | nindent 6 }}
       terminationGracePeriodSeconds: 30
       containers:
         - name: redis-sentinel

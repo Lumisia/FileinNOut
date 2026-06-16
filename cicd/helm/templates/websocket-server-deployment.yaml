@@ -1,7 +1,11 @@
 {{- $websocketRollout := .Values.websocket.rollout | default dict -}}
 {{- $websocketBlueGreen := $websocketRollout.blueGreen | default dict -}}
-apiVersion: argoproj.io/v1alpha1
-kind: Rollout
+{{- $rolloutEnabled := true -}}
+{{- if hasKey $websocketRollout "enabled" -}}
+{{- $rolloutEnabled = $websocketRollout.enabled -}}
+{{- end -}}
+apiVersion: {{ ternary "argoproj.io/v1alpha1" "apps/v1" $rolloutEnabled }}
+kind: {{ ternary "Rollout" "Deployment" $rolloutEnabled }}
 metadata:
   name: {{ include "wafflebear.fullname" . }}-websocket
   labels:
@@ -17,11 +21,18 @@ spec:
       app.kubernetes.io/name: websocket
       app.kubernetes.io/part-of: wafflebear
   strategy:
+{{- if $rolloutEnabled }}
     blueGreen:
       activeService: {{ include "wafflebear.fullname" . }}-websocket
       previewService: {{ include "wafflebear.fullname" . }}-websocket-preview
       autoPromotionEnabled: {{ default true $websocketBlueGreen.autoPromotionEnabled }}
       scaleDownDelaySeconds: {{ default 600 $websocketBlueGreen.scaleDownDelaySeconds }}
+{{- else }}
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+{{- end }}
   template:
     metadata:
       annotations:
@@ -30,7 +41,7 @@ spec:
         app.kubernetes.io/name: websocket
         app.kubernetes.io/part-of: wafflebear
     spec:
-{{ include "wafflebear.workerScheduling" (dict "app.kubernetes.io/name" "websocket" "app.kubernetes.io/part-of" "wafflebear") | nindent 6 }}
+{{ include "wafflebear.workerScheduling" (dict "root" . "labels" (dict "app.kubernetes.io/name" "websocket" "app.kubernetes.io/part-of" "wafflebear")) | nindent 6 }}
       terminationGracePeriodSeconds: 120
       containers:
         - name: websocket-server

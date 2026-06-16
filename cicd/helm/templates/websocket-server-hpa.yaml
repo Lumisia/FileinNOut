@@ -1,5 +1,10 @@
 {{- $autoscaling := .Values.websocket.autoscaling | default dict }}
 {{- if ($autoscaling.enabled | default false) }}
+{{- $websocketRollout := .Values.websocket.rollout | default dict -}}
+{{- $rolloutEnabled := true -}}
+{{- if hasKey $websocketRollout "enabled" -}}
+{{- $rolloutEnabled = $websocketRollout.enabled -}}
+{{- end -}}
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
@@ -9,8 +14,8 @@ metadata:
     app.kubernetes.io/part-of: wafflebear
 spec:
   scaleTargetRef:
-    apiVersion: argoproj.io/v1alpha1
-    kind: Rollout
+    apiVersion: {{ ternary "argoproj.io/v1alpha1" "apps/v1" $rolloutEnabled }}
+    kind: {{ ternary "Rollout" "Deployment" $rolloutEnabled }}
     name: {{ include "wafflebear.fullname" . }}-websocket
   minReplicas: {{ $autoscaling.minReplicas }}
   maxReplicas: {{ $autoscaling.maxReplicas }}

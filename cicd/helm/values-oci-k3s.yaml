@@ -1,0 +1,120 @@
+# OCI 4 OCPU / 24 GiB single-node k3s profile.
+# Apply after values.yaml:
+#   helm upgrade --install fileinnout ./cicd/helm -f values.yaml -f values-oci-k3s.yaml -f values.private.yaml
+
+scheduling:
+  workerOnly: false
+
+backend:
+  replicaCount: 1
+  image:
+    pullPolicy: IfNotPresent
+  env:
+    APP_FRONTEND_URL: "https://app.example.com"
+    APP_BACKEND_URL: "https://api.example.com/api"
+    STORAGE_PROVIDER: "minio"
+    MINIO_API: "http://minio:9000"
+  resources:
+    requests:
+      cpu: "300m"
+      memory: "768Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1536Mi"
+  rollout:
+    enabled: false
+    blueGreen:
+      autoPromotionEnabled: true
+      scaleDownDelaySeconds: 0
+
+mariadb:
+  storageClassName: local-path
+  storage:
+    size: 8Gi
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "768Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1536Mi"
+
+frontend:
+  replicaCount: 1
+  image:
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+  rollout:
+    enabled: false
+    blueGreen:
+      autoPromotionEnabled: true
+      scaleDownDelaySeconds: 0
+
+websocket:
+  replicaCount: 1
+  image:
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "300m"
+      memory: "384Mi"
+  rollout:
+    enabled: false
+    blueGreen:
+      autoPromotionEnabled: true
+      scaleDownDelaySeconds: 0
+  autoscaling:
+    enabled: false
+
+redis:
+  replicaCount: 1
+  persistence:
+    enabled: true
+    storageClassName: local-path
+    size: 2Gi
+  sentinel:
+    enabled: false
+  config:
+    maxmemory: "128mb"
+    maxmemoryPolicy: "allkeys-lru"
+    appendonly: "yes"
+    saveSeconds: "60"
+    saveChanges: "1"
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "128Mi"
+    limits:
+      cpu: "300m"
+      memory: "384Mi"
+
+ingress:
+  enabled: true
+  splitResources: false
+  className: "nginx"
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+  hosts:
+    frontend: "app.example.com"
+    api: "api.example.com"
+    backend: "api.example.com"
+    swagger: "swagger.example.com"
+  tls:
+    enabled: true
+    secretName: "fileinnout-tls"
