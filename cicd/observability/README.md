@@ -27,11 +27,16 @@ Run these on the OCI node after k3s, kubectl, helm, and istioctl are installed.
 ```bash
 istioctl install \
   --set profile=ambient \
+  --set values.cni.cniBinDir=/var/lib/rancher/k3s/data/cni \
+  --set values.cni.cniConfDir=/var/lib/rancher/k3s/agent/etc/cni/net.d \
   --set meshConfig.extensionProviders[0].name=jaeger \
   --set meshConfig.extensionProviders[0].opentelemetry.service=jaeger-collector.observability.svc.cluster.local \
   --set meshConfig.extensionProviders[0].opentelemetry.port=4317 \
   -y
 ```
+
+k3s stores CNI binaries and config under `/var/lib/rancher/k3s`, so the CNI
+paths above are required for Istio ambient on this OCI node.
 
 ### 2. Create observability namespace and Jaeger
 
