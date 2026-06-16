@@ -32,6 +32,17 @@ test('GitHub Actions deployment is manual-only because Jenkins owns main pushes'
   assert.doesNotMatch(workflow, /push:\s*\r?\n\s*branches:\s*\["main"\]/)
 })
 
+test('GitHub Actions builds multi-arch images so they run on aarch64 OCI nodes', () => {
+  const workflow = readRepoFile('.github/workflows/main.yml')
+
+  // amd64 runner + plain build = amd64-only images that fail to pull on arm64 nodes.
+  // buildx must produce a linux/amd64 + linux/arm64 manifest.
+  assert.match(workflow, /docker\/setup-qemu-action/)
+  assert.match(workflow, /docker\/setup-buildx-action/)
+  assert.match(workflow, /buildx bake/)
+  assert.match(workflow, /platform=linux\/amd64,linux\/arm64/)
+})
+
 test('OCI k3s values profile uses single-node friendly resources and domains', () => {
   const valuesPath = resolve(repoRoot, 'cicd/helm/values-oci-k3s.yaml')
   assert.equal(existsSync(valuesPath), true, 'OCI k3s values overlay should exist')
