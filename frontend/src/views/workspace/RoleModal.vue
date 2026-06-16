@@ -2,6 +2,7 @@
 import { ref, watch } from 'vue';
 import postApi from '@/api/postApi';
 import { useToastStore } from '@/stores/useToastStore';
+import { useFocusTrap } from '@/composables/useFocusTrap';
 
 const props = defineProps({
   isOpen: Boolean,
@@ -14,6 +15,9 @@ const props = defineProps({
 
 const emit = defineEmits(['close', 'refresh']);
 const toast = useToastStore();
+
+const panelRef = ref(null);
+useFocusTrap(() => props.isOpen, panelRef, { onEsc: () => emit('close') });
 
 // 내부에서 수정할 수 있도록 리스트 복사
 const roleList = ref([]);
@@ -57,10 +61,17 @@ const handleSaveRole = async () => {
   <div v-if="isOpen" class="fixed inset-0 z-[1000] flex items-center justify-center px-4">
     <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="$emit('close')"></div>
 
-    <div class="relative bg-[var(--bg-main)] border border-[var(--border-color)] w-full max-w-md rounded-2xl shadow-2xl overflow-hidden">
-      
+    <div
+      ref="panelRef"
+      class="relative bg-[var(--bg-main)] border border-[var(--border-color)] w-full max-w-md rounded-2xl shadow-2xl overflow-hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="role-modal-title"
+      tabindex="-1"
+    >
+
       <div class="p-6 pb-4">
-        <h2 class="text-xl font-bold text-[var(--text-main)]">권한 설정</h2>
+        <h2 id="role-modal-title" class="text-xl font-bold text-[var(--text-main)]">권한 설정</h2>
         <p class="text-sm text-[var(--text-muted)] mt-1">이 페이지에 참여 중인 멤버의 권한을 관리하세요.</p>
       </div>
 

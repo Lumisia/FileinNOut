@@ -9,6 +9,7 @@ import { useFileStore } from "@/stores/useFileStore";
 import { useViewStore } from "@/stores/viewStore";
 import { useToastStore } from "@/stores/useToastStore";
 import { useDialog } from "@/composables/useDialog";
+import { useFocusTrap } from "@/composables/useFocusTrap";
 import {
   FILE_SIZE_OPTIONS,
   FILE_STATUS_OPTIONS,
@@ -68,6 +69,13 @@ const previewTarget = ref(null);
 const shareTargets = ref([]);
 const shareInfo = ref([]);
 const shareEmail = ref("");
+
+const renamePanelRef = ref(null);
+const propertyPanelRef = ref(null);
+const sharePanelRef = ref(null);
+useFocusTrap(() => Boolean(renameTarget.value), renamePanelRef, { onEsc: () => closeRenameModal() });
+useFocusTrap(() => Boolean(propertyTarget.value), propertyPanelRef, { onEsc: () => closePropertyModal() });
+useFocusTrap(() => shareTargets.value.length > 0, sharePanelRef, { onEsc: () => closeShareDialog() });
 const shareCancelEmail = ref("");
 const shareError = ref("");
 const isSharing = ref(false);
@@ -969,10 +977,17 @@ onMounted(() => {
     <div v-else-if="showEmpty" class="rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-14 text-center text-sm text-gray-400">{{ "\uD45C\uC2DC\uD560 \uD30C\uC77C\uC774 \uC5C6\uC2B5\uB2C8\uB2E4." }}</div>
 
     <div v-if="renameTarget" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 px-4" @click.self="closeRenameModal">
-      <div class="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+      <div
+        ref="renamePanelRef"
+        class="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="rename-modal-title"
+        tabindex="-1"
+      >
         <div class="flex items-start justify-between gap-3">
           <div>
-            <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">{{ "\uD3F4\uB354 \uC774\uB984 \uBCC0\uACBD" }}</p>
+            <p id="rename-modal-title" class="text-xs font-semibold uppercase tracking-wide text-gray-400">{{ "\uD3F4\uB354 \uC774\uB984 \uBCC0\uACBD" }}</p>
             <h3 class="mt-1 text-xl font-bold text-gray-900">{{ renameTarget.name }}</h3>
           </div>
           <button type="button" class="rounded-full p-2 text-gray-400 transition hover:bg-slate-100 hover:text-gray-600" @click="closeRenameModal">
@@ -992,10 +1007,17 @@ onMounted(() => {
     </div>
 
     <div v-if="propertyTarget" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 px-4" @click.self="closePropertyModal">
-      <div class="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl">
+      <div
+        ref="propertyPanelRef"
+        class="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="property-modal-title"
+        tabindex="-1"
+      >
         <div class="flex items-start justify-between gap-3">
           <div>
-            <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">{{ "\uD3F4\uB354 \uC18D\uC131" }}</p>
+            <p id="property-modal-title" class="text-xs font-semibold uppercase tracking-wide text-gray-400">{{ "\uD3F4\uB354 \uC18D\uC131" }}</p>
             <h3 class="mt-1 text-xl font-bold text-gray-900">{{ propertySummary?.folderName || propertyTarget.name }}</h3>
             <p class="mt-2 text-sm text-gray-500">{{ propertyPathLabel }}</p>
           </div>
@@ -1034,10 +1056,17 @@ onMounted(() => {
       </div>
     </div>
     <div v-if="shareTargets.length > 0" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 px-4" @click.self="closeShareDialog">
-      <div class="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl">
+      <div
+        ref="sharePanelRef"
+        class="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="share-dialog-title"
+        tabindex="-1"
+      >
         <div class="flex items-start justify-between gap-3">
           <div>
-            <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">{{ "\uD30C\uC77C \uACF5\uC720" }}</p>
+            <p id="share-dialog-title" class="text-xs font-semibold uppercase tracking-wide text-gray-400">{{ "\uD30C\uC77C \uACF5\uC720" }}</p>
             <h3 class="mt-1 text-xl font-bold text-gray-900">{{ shareTargets.length === 1 ? shareTargets[0].name : shareTargets.length + "\uAC1C \uD30C\uC77C \uC120\uD0DD" }}</h3>
             <p class="mt-2 text-sm text-gray-500">{{ "\uC774\uBA54\uC77C\uC744 \uC785\uB825\uD558\uBA74 \uB2E4\uC6B4\uB85C\uB4DC \uAD8C\uD55C\uC774 \uBD80\uC5EC\uB418\uACE0, \uC0C1\uB300\uBC29\uC758 \uACF5\uC720 \uBB38\uC11C\uD568\uC5D0\uC11C\uB3C4 \uD30C\uC77C\uC744 \uD655\uC778\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4." }}</p>
           </div>
