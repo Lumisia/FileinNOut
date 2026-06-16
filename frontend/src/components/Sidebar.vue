@@ -299,7 +299,7 @@ const handleAction = async (action, idx) => {
                   </div>
                 </div>
               </template>
-              <div v-else class="px-3 py-4 text-xs text-[var(--text-muted)] italic text-center border border-dashed border-gray-200 rounded-lg mx-2">생성된 페이지가 없습니다.</div>
+              <div v-else class="px-3 py-4 text-xs text-[var(--text-muted)] italic text-center border border-dashed border-gray-200 rounded-lg mx-2">아직 페이지가 없어요. 위 + 버튼으로 새 워크스페이스를 만들어 보세요.</div>
             </div>
           </div>
 
@@ -342,10 +342,10 @@ const handleAction = async (action, idx) => {
                   </div>
                 </div>
               </template>
-              <div v-else class="px-3 py-4 text-xs text-[var(--text-muted)] italic text-center border border-dashed border-gray-200 rounded-lg mx-2">생성된 페이지가 없습니다.</div>
+              <div v-else class="px-3 py-4 text-xs text-[var(--text-muted)] italic text-center border border-dashed border-gray-200 rounded-lg mx-2">초대받은 협업 문서가 여기에 표시됩니다.</div>
             </div>
           </div>
-          
+
           <div class="border-t border-[var(--border-color)] my-4 mx-2"></div>
           
           <div class="space-y-1">
