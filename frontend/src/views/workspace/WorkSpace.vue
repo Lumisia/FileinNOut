@@ -8,6 +8,7 @@ import loadpost from '@/components/workspace/loadpost'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useToastStore } from '@/stores/useToastStore'
 import { useDialog } from '@/composables/useDialog'
+import { useFocusTrap } from '@/composables/useFocusTrap'
 import SockJS from 'sockjs-client'
 import Stomp from 'stompjs'
 import { apiPath } from '@/utils/backendUrl'
@@ -288,6 +289,8 @@ const versionPanelOpen  = ref(false)
 const versions          = ref([])
 const versionPreview    = ref(null)
 const versionsLoading   = ref(false)
+const versionPanelRef   = ref(null)
+useFocusTrap(() => versionPanelOpen.value, versionPanelRef, { onEsc: () => closeVersionPanel() })
 
 const formatVersionDate = (val) => {
   if (!val) return ''
@@ -866,9 +869,17 @@ onBeforeUnmount(async () => {
         class="fixed inset-0 z-[900] flex items-start justify-end"
         @click.self="closeVersionPanel"
       >
-        <div class="w-80 h-full bg-white shadow-2xl border-l border-gray-200 flex flex-col overflow-hidden" @click.stop>
+        <div
+          ref="versionPanelRef"
+          class="w-80 h-full bg-white shadow-2xl border-l border-gray-200 flex flex-col overflow-hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="version-panel-title"
+          tabindex="-1"
+          @click.stop
+        >
           <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-            <span class="font-bold text-sm text-gray-700">버전 이력</span>
+            <span id="version-panel-title" class="font-bold text-sm text-gray-700">버전 이력</span>
             <button @click="closeVersionPanel" class="text-gray-400 hover:text-gray-600">
               <i class="fa-solid fa-xmark"></i>
             </button>

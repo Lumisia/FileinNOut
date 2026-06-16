@@ -5,6 +5,7 @@ import loadpost from "@/components/workspace/loadpost";
 import { fetchGroupOverview, shareWorkspacesWithTargets } from "@/api/groupApi";
 import GroupRecipientSelector from "@/components/group/GroupRecipientSelector.vue";
 import { useToastStore } from "@/stores/useToastStore";
+import { useFocusTrap } from "@/composables/useFocusTrap";
 
 const props = defineProps({
   isOpen: Boolean,
@@ -15,6 +16,9 @@ const props = defineProps({
 
 const emit = defineEmits(["close", "refresh"]);
 const toast = useToastStore();
+
+const panelRef = ref(null);
+useFocusTrap(() => props.isOpen, panelRef, { onEsc: () => emit("close") });
 
 const privacyStatus = ref(props.initialStatus || "Private");
 const overview = ref(null);
@@ -154,11 +158,18 @@ const handleSaveStatus = async () => {
   >
     <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="$emit('close')"></div>
 
-    <div class="relative flex h-[min(82vh,760px)] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-[var(--border-color)] bg-[var(--bg-main)] shadow-2xl">
+    <div
+      ref="panelRef"
+      class="relative flex h-[min(82vh,760px)] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-[var(--border-color)] bg-[var(--bg-main)] shadow-2xl"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="share-modal-title"
+      tabindex="-1"
+    >
       <div class="shrink-0 border-b border-[var(--border-color)] p-6">
         <div class="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 class="text-2xl font-black text-[var(--text-main)]">워크스페이스 공유</h2>
+          <h2 id="share-modal-title" class="text-2xl font-black text-[var(--text-main)]">워크스페이스 공유</h2>
           <p class="mt-1 text-sm text-[var(--text-muted)]">
             공개 링크를 관리하고, 사용자와 그룹을 선택해 워크스페이스를 공유할 수 있습니다.
           </p>
