@@ -49,6 +49,11 @@ Create these credentials before the first deploy:
 | `oci-k3s-kubeconfig` | Secret file | Deploy to the k3s cluster |
 | `fileinnout-values-private` | Secret file | Private Helm values |
 
+Because Jenkins runs inside Docker on the same OCI node, the kubeconfig stored
+as `oci-k3s-kubeconfig` should use `https://host.docker.internal:6443` as the
+cluster server. The Compose profile maps `host.docker.internal` to Docker's
+host gateway.
+
 The private values file should contain only runtime secrets and domain-specific
 values that must not be committed.
 

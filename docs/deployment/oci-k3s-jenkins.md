@@ -55,6 +55,10 @@ The Jenkins agent must have:
 On the OCI node, call out before installing Jenkins or wiring the kubeconfig.
 That is the point where cloud access is required.
 
+Install k3s with Traefik disabled and include `host.docker.internal` in the API
+server TLS SANs. Jenkins runs in Docker, so its kubeconfig should point at
+`https://host.docker.internal:6443` instead of `https://127.0.0.1:6443`.
+
 The reproducible Jenkins controller profile lives in `cicd/jenkins`:
 
 ```bash
