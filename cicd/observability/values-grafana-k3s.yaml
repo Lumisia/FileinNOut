@@ -1,7 +1,6 @@
 # grafana/grafana values for OCI single-node k3s.
-# Grafana is public for the portfolio, but visitors get anonymous read-only
-# (Viewer). It reads the Prometheus that is already running, so it adds no new
-# scrape load.
+# Grafana is public at the network layer, but requires login. Use the built-in
+# admin account to create and curate portfolio dashboards.
 
 # 관리자 비밀번호는 차트가 무작위로 생성해 Secret에 저장한다(평문 금지).
 #   kubectl -n observability get secret grafana -o jsonpath="{.data.admin-password}" | base64 -d
@@ -36,10 +35,10 @@ grafana.ini:
     check_for_updates: false
   users:
     allow_sign_up: false
+  auth:
+    disable_login_form: false
   auth.anonymous:
-    enabled: true
-    org_name: "Main Org."
-    org_role: Viewer
+    enabled: false
     hide_version: true
 
 # 이미 떠 있는 Prometheus/Jaeger를 데이터소스로 연결한다.
