@@ -1,4 +1,4 @@
-import { api } from "@/plugins/axiosinterceptor";
+﻿import { api } from "@/plugins/axiosinterceptor";
 
 const normalizeFileFormat = (file) => {
   if (typeof file?.name !== "string") return "";
@@ -96,7 +96,7 @@ const extractDownloadLink = (responseData) => {
 export async function downloadFileAsset(fileOrUrl, fallbackFileName = "file") {
   const downloadUrl = resolveDownloadUrl(fileOrUrl);
   if (!downloadUrl) {
-    throw new Error("\uB2E4\uC6B4\uB85C\uB4DC\uD560 \uD30C\uC77C \uC8FC\uC18C\uB97C \uCC3E\uC744 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.");
+    throw new Error("다운로드할 파일 주소를 찾을 수 없습니다.");
   }
 
   const fileName = resolveDownloadFileName(fileOrUrl, fallbackFileName);
@@ -112,7 +112,7 @@ export async function downloadFileAsset(fileOrUrl, fallbackFileName = "file") {
   });
   const attachmentDownloadUrl = extractDownloadLink(response?.data);
   if (!attachmentDownloadUrl) {
-    throw new Error("\uB2E4\uC6B4\uB85C\uB4DC \uB9C1\uD06C\uB97C \uCC3E\uC744 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.");
+    throw new Error("다운로드 링크를 찾을 수 없습니다.");
   }
 
   triggerDirectDownload(attachmentDownloadUrl, fileName);
