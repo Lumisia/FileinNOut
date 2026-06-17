@@ -1,4 +1,4 @@
-<script setup>
+﻿<script setup>
 import { computed, markRaw, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter, onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router'
 import { downloadFileAsset } from '@/api/filesApi'
@@ -883,64 +883,64 @@ onBeforeUnmount(async () => {
       <Teleport to="body">
       <div
         v-if="versionPanelOpen"
-        class="fixed inset-0 z-[900] flex items-start justify-end"
+        class="version-history-overlay"
         @click.self="closeVersionPanel"
       >
         <div
           ref="versionPanelRef"
-          class="w-80 h-full bg-white shadow-2xl border-l border-gray-200 flex flex-col overflow-hidden"
+          class="version-history-panel"
           role="dialog"
           aria-modal="true"
           aria-labelledby="version-panel-title"
           tabindex="-1"
           @click.stop
         >
-          <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-            <span id="version-panel-title" class="font-bold text-sm text-gray-700">버전 이력</span>
-            <button @click="closeVersionPanel" class="text-gray-400 hover:text-gray-600">
+          <div class="version-history-panel__header">
+            <span id="version-panel-title" class="version-history-panel__title">버전 이력</span>
+            <button type="button" @click="closeVersionPanel" class="version-history-panel__close">
               <i class="fa-solid fa-xmark"></i>
             </button>
           </div>
 
-          <div v-if="versionsLoading" class="version-skeleton flex-1 px-4 py-4" aria-label="버전 이력을 불러오는 중입니다.">
+          <div v-if="versionsLoading" class="version-skeleton version-history-panel__body" aria-label="버전 이력을 불러오는 중입니다.">
             <div v-for="row in [1, 2, 3, 4, 5]" :key="row" class="version-skeleton__row">
               <span></span>
               <span></span>
             </div>
           </div>
-          <div v-else-if="versionLoadError" class="version-error-panel flex-1 px-4 py-6 text-xs text-rose-600">
-            <p class="font-semibold">버전 이력을 불러오지 못했습니다.</p>
-            <p class="mt-1 break-words">{{ versionLoadError }}</p>
+          <div v-else-if="versionLoadError" class="version-error-panel version-history-panel__body version-history-panel__error">
+            <p class="version-history-panel__error-title">버전 이력을 불러오지 못했습니다.</p>
+            <p class="version-history-panel__error-message">{{ versionLoadError }}</p>
             <button type="button" class="version-error-panel__button" :disabled="versionsLoading" @click="retryVersionList">
               {{ versionsLoading ? "다시 시도 중..." : "다시 시도" }}
             </button>
           </div>
-          <div v-else-if="!versions.length" class="flex-1 flex items-center justify-center text-xs text-gray-400">
+          <div v-else-if="!versions.length" class="version-history-panel__empty">
             저장된 버전이 없습니다.
           </div>
-          <ul v-else class="flex-1 overflow-y-auto divide-y divide-gray-100">
+          <ul v-else class="version-history-list">
             <li
               v-for="v in versions"
               :key="v.id"
-              class="px-4 py-3 hover:bg-gray-50 cursor-pointer"
+              class="version-history-list__item"
               @click="previewVersion(v.versionNum)"
             >
-              <div class="flex items-center justify-between">
-                <span class="text-xs font-semibold text-gray-700">v{{ v.versionNum }}</span>
-                <span class="text-[10px] text-gray-400">{{ formatVersionDate(v.createdAt) }}</span>
+              <div class="version-history-list__meta">
+                <span class="version-history-list__version">v{{ v.versionNum }}</span>
+                <span class="version-history-list__date">{{ formatVersionDate(v.createdAt) }}</span>
               </div>
-              <p class="text-[11px] text-gray-500 truncate mt-0.5">{{ v.titleSnapshot }}</p>
+              <p class="version-history-list__title">{{ v.titleSnapshot }}</p>
             </li>
           </ul>
 
           <!-- 버전 미리보기 -->
-          <div v-if="versionPreview" class="border-t border-gray-100 px-4 py-3 bg-gray-50 max-h-64 overflow-y-auto">
-            <div class="flex items-center justify-between mb-2">
-              <span class="text-xs font-bold text-gray-600">v{{ versionPreview.versionNum }} 미리보기</span>
-              <button @click="versionPreview = null" class="text-[10px] text-gray-400 hover:text-gray-600">닫기</button>
+          <div v-if="versionPreview" class="version-preview">
+            <div class="version-preview__header">
+              <span class="version-preview__version">v{{ versionPreview.versionNum }} 미리보기</span>
+              <button type="button" @click="versionPreview = null" class="version-preview__close">닫기</button>
             </div>
-            <p class="text-[11px] font-semibold text-gray-700 mb-1">{{ versionPreview.titleSnapshot }}</p>
-            <pre class="text-[10px] text-gray-500 whitespace-pre-wrap break-all">{{ versionPreview.contentSnapshot }}</pre>
+            <p class="version-preview__title">{{ versionPreview.titleSnapshot }}</p>
+            <pre class="version-preview__content">{{ versionPreview.contentSnapshot }}</pre>
           </div>
         </div>
       </div>
@@ -1885,4 +1885,235 @@ onBeforeUnmount(async () => {
   .workspace-layout { padding: 0 12px 20px; }
   .workspace-floating-item__actions { grid-template-columns: 1fr; }
 }
+</style>
+
+<!-- 버전 이력 패널 전역 스타일 (Teleport → body 마운트되므로 scoped 밖에 위치) -->
+<style>
+.version-history-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.35);
+  z-index: 1000;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.version-history-panel {
+  position: relative;
+  width: 320px;
+  height: 100%;
+  background: #ffffff;
+  color: #1f2937;
+  border-left: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -4px 0 24px rgba(15, 23, 42, 0.12);
+  overflow: hidden;
+}
+
+html.dark .version-history-panel {
+  background: #1e1e1e;
+  color: #e5e7eb;
+  border-left-color: #333333;
+}
+
+.version-history-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px;
+  border-bottom: 1px solid #e5e7eb;
+  flex-shrink: 0;
+}
+html.dark .version-history-panel__header { border-bottom-color: #333333; }
+
+.version-history-panel__title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #1f2937;
+}
+html.dark .version-history-panel__title { color: #e5e7eb; }
+
+.version-history-panel__close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  color: #6b7280;
+  font-size: 16px;
+  transition: background 0.15s;
+}
+.version-history-panel__close:hover { background: rgba(15, 23, 42, 0.07); }
+
+.version-history-panel__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.version-history-panel__empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  font-size: 14px;
+  color: #6b7280;
+  text-align: center;
+}
+
+.version-history-panel__error { padding: 20px; }
+.version-history-panel__error-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #dc2626;
+  margin-bottom: 6px;
+}
+.version-history-panel__error-message {
+  font-size: 13px;
+  color: #6b7280;
+  margin-bottom: 14px;
+}
+
+/* 스켈레톤 */
+.version-skeleton { display: flex; flex-direction: column; gap: 10px; }
+.version-skeleton__row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.04);
+}
+.version-skeleton__row span {
+  display: block;
+  height: 12px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.08);
+  animation: version-skeleton-pulse 1.2s ease-in-out infinite;
+}
+.version-skeleton__row span:first-child { width: 60%; }
+.version-skeleton__row span:last-child  { width: 40%; }
+@keyframes version-skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+/* 에러 버튼 */
+.version-error-panel__button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px;
+  background: #2563eb;
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.version-error-panel__button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* 버전 목록 */
+.version-history-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.version-history-list__item {
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+html.dark .version-history-list__item { border-color: #333333; }
+.version-history-list__item:hover {
+  background: rgba(37, 99, 235, 0.05);
+  border-color: rgba(37, 99, 235, 0.3);
+}
+
+.version-history-list__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.version-history-list__version {
+  font-size: 12px;
+  font-weight: 700;
+  color: #2563eb;
+  background: rgba(37, 99, 235, 0.1);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.version-history-list__date {
+  font-size: 11px;
+  color: #9ca3af;
+}
+.version-history-list__title {
+  font-size: 13px;
+  color: #374151;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 0;
+}
+html.dark .version-history-list__title { color: #d1d5db; }
+
+/* 버전 미리보기 */
+.version-preview {
+  border-top: 1px solid #e5e7eb;
+  padding: 14px;
+  background: rgba(15, 23, 42, 0.02);
+}
+html.dark .version-preview { border-top-color: #333333; }
+.version-preview__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.version-preview__version {
+  font-size: 12px;
+  font-weight: 700;
+  color: #2563eb;
+}
+.version-preview__close {
+  font-size: 12px;
+  color: #6b7280;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+.version-preview__close:hover { background: rgba(15, 23, 42, 0.06); }
+.version-preview__title {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  color: #1f2937;
+}
+html.dark .version-preview__title { color: #e5e7eb; }
+.version-preview__content {
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: #6b7280;
+  max-height: 200px;
+  overflow-y: auto;
+  background: #f9fafb;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+html.dark .version-preview__content { background: #2d2d2d; }
 </style>
