@@ -1,4 +1,4 @@
-﻿<script setup>
+<script setup>
 import { computed, markRaw, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter, onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router'
 import { downloadFileAsset } from '@/api/filesApi'
@@ -293,6 +293,11 @@ const versionLoadError  = ref('')
 const versionPanelRef   = ref(null)
 useFocusTrap(() => versionPanelOpen.value, versionPanelRef, { onEsc: () => closeVersionPanel() })
 
+// 버전 diff 모달
+const versionDiffOpen    = ref(false)
+const versionDiffLoading = ref(false)
+const versionDiffData    = ref(null)  // { current, prev }
+
 const formatVersionDate = (val) => {
   if (!val) return ''
   return new Intl.DateTimeFormat('ko-KR', {
@@ -334,13 +339,146 @@ const closeVersionPanel = () => {
   versionLoadError.value = ''
 }
 
+// Editor.js JSON → 순수 텍스트 라인 배열로 변환
+const editorJsonToLines = (jsonStr) => {
+  if (!jsonStr) return []
+  try {
+    const parsed = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr
+    const blocks = parsed?.blocks ?? []
+    const lines = []
+    blocks.forEach((block) => {
+      const d = block?.data ?? {}
+      switch (block?.type) {
+        case 'header':
+          lines.push('#'.repeat(d.level || 1) + ' ' + (d.text || ''))
+          break
+        case 'paragraph':
+          lines.push(d.text || '')
+          break
+        case 'list': {
+          const style = d.style === 'ordered' ? 'ordered' : 'unordered'
+          ;(d.items || []).forEach((item, idx) => {
+            const prefix = style === 'ordered' ? (idx + 1) + '.' : '•'
+            lines.push('  ' + prefix + ' ' + (typeof item === 'string' ? item : (item?.content || '')))
+          })
+          break
+        }
+        case 'checklist':
+          ;(d.items || []).forEach((item) => {
+            lines.push('  [' + (item?.checked ? 'x' : ' ') + '] ' + (item?.text || ''))
+          })
+          break
+        case 'quote':
+          lines.push('\u275d ' + (d.text || '') + (d.caption ? ' — ' + d.caption : ''))
+          break
+        case 'code':
+          lines.push('```')
+          ;(d.code || '').split('\n').forEach((l) => lines.push(l))
+          lines.push('```')
+          break
+        case 'delimiter':
+          lines.push('───')
+          break
+        case 'table':
+          ;(d.content || []).forEach((row) => lines.push(row.join(' | ')))
+          break
+        case 'image':
+          lines.push('[이미지: ' + (d.caption || d.file?.url || '') + ']')
+          break
+        case 'embed':
+          lines.push('[임베드: ' + (d.source || '') + ']')
+          break
+        default:
+          if (d.text) lines.push(d.text)
+          break
+      }
+    })
+    return lines
+  } catch (_) {
+    return (jsonStr || '').split('\n')
+  }
+}
+
+// LCS 기반 라인 diff
+const computeDiff = (oldLines, newLines) => {
+  const m = oldLines.length
+  const n = newLines.length
+  const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0))
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      if (oldLines[i - 1] === newLines[j - 1]) {
+        dp[i][j] = dp[i - 1][j - 1] + 1
+      } else {
+        dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1])
+      }
+    }
+  }
+  const result = []
+  let i = m, j = n
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && oldLines[i - 1] === newLines[j - 1]) {
+      result.unshift({ type: 'equal', text: oldLines[i - 1] })
+      i--; j--
+    } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+      result.unshift({ type: 'add', text: newLines[j - 1] })
+      j--
+    } else {
+      result.unshift({ type: 'remove', text: oldLines[i - 1] })
+      i--
+    }
+  }
+  return result
+}
+
+const versionDiffLines = computed(() => {
+  if (!versionDiffData.value) return []
+  const { current, prev } = versionDiffData.value
+  const currentLines = [
+    ...(current.titleSnapshot ? ['제목: ' + current.titleSnapshot] : []),
+    ...editorJsonToLines(current.contentSnapshot),
+  ]
+  const prevLines = [
+    ...(prev?.titleSnapshot ? ['제목: ' + prev.titleSnapshot] : []),
+    ...(prev ? editorJsonToLines(prev.contentSnapshot) : []),
+  ]
+  if (!prev) {
+    return currentLines.map((t) => ({ type: 'add', text: t }))
+  }
+  return computeDiff(prevLines, currentLines)
+})
+
+const versionDiffStats = computed(() => {
+  const lines = versionDiffLines.value
+  return {
+    added:   lines.filter((l) => l.type === 'add').length,
+    removed: lines.filter((l) => l.type === 'remove').length,
+    equal:   lines.filter((l) => l.type === 'equal').length,
+  }
+})
+
 const previewVersion = async (versionNum) => {
   if (!workspaceId.value) return
+  versionDiffLoading.value = true
+  versionDiffOpen.value    = true
+  versionDiffData.value    = null
   try {
-    versionPreview.value = await fetchPostVersion(workspaceId.value, versionNum)
+    const current = await fetchPostVersion(workspaceId.value, versionNum)
+    let prev = null
+    if (versionNum > 1) {
+      try { prev = await fetchPostVersion(workspaceId.value, versionNum - 1) } catch (_) { prev = null }
+    }
+    versionDiffData.value = { current, prev }
   } catch (error) {
     toast.error(getVersionErrorMessage(error, '버전을 불러오지 못했습니다.'))
+    versionDiffOpen.value = false
+  } finally {
+    versionDiffLoading.value = false
   }
+}
+
+const closeVersionDiff = () => {
+  versionDiffOpen.value = false
+  versionDiffData.value = null
 }
 
 // ─── 저장 ─────────────────────────────────────────────────────────────────────
@@ -930,20 +1068,79 @@ onBeforeUnmount(async () => {
                 <span class="version-history-list__date">{{ formatVersionDate(v.createdAt) }}</span>
               </div>
               <p class="version-history-list__title">{{ v.titleSnapshot }}</p>
+              <span class="version-history-list__hint">클릭하여 변경 내용 보기 →</span>
             </li>
           </ul>
-
-          <!-- 버전 미리보기 -->
-          <div v-if="versionPreview" class="version-preview">
-            <div class="version-preview__header">
-              <span class="version-preview__version">v{{ versionPreview.versionNum }} 미리보기</span>
-              <button type="button" @click="versionPreview = null" class="version-preview__close">닫기</button>
-            </div>
-            <p class="version-preview__title">{{ versionPreview.titleSnapshot }}</p>
-            <pre class="version-preview__content">{{ versionPreview.contentSnapshot }}</pre>
-          </div>
         </div>
       </div>
+      </Teleport>
+
+      <!-- 버전 Diff 모달 -->
+      <Teleport to="body">
+        <div
+          v-if="versionDiffOpen"
+          class="vdiff-overlay"
+          @click.self="closeVersionDiff"
+        >
+          <div class="vdiff-modal" role="dialog" aria-modal="true" aria-label="버전 변경 내용">
+            <div class="vdiff-header">
+              <div class="vdiff-header__left">
+                <i class="fa-solid fa-code-compare vdiff-header__icon"></i>
+                <div>
+                  <p class="vdiff-header__title">
+                    <template v-if="versionDiffData">
+                      v{{ versionDiffData.current?.versionNum }} 변경 내용
+                      <span v-if="versionDiffData.prev" class="vdiff-header__compare">— v{{ versionDiffData.prev.versionNum }} 대비</span>
+                      <span v-else class="vdiff-header__compare">— 최초 버전</span>
+                    </template>
+                    <template v-else>버전 불러오는 중...</template>
+                  </p>
+                  <p v-if="versionDiffData" class="vdiff-header__sub">
+                    {{ formatVersionDate(versionDiffData.current?.createdAt) }} · {{ versionDiffData.current?.titleSnapshot }}
+                  </p>
+                </div>
+              </div>
+              <button type="button" class="vdiff-close" @click="closeVersionDiff">
+                <i class="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+
+            <div v-if="!versionDiffLoading && versionDiffData" class="vdiff-stats">
+              <span class="vdiff-stats__badge vdiff-stats__badge--add"><i class="fa-solid fa-plus"></i> {{ versionDiffStats.added }} 추가</span>
+              <span class="vdiff-stats__badge vdiff-stats__badge--remove"><i class="fa-solid fa-minus"></i> {{ versionDiffStats.removed }} 삭제</span>
+              <span class="vdiff-stats__badge vdiff-stats__badge--equal"><i class="fa-solid fa-equals"></i> {{ versionDiffStats.equal }} 유지</span>
+            </div>
+
+            <div v-if="versionDiffLoading" class="vdiff-loading">
+              <div class="vdiff-spinner"></div>
+              <p>버전 데이터를 불러오는 중...</p>
+            </div>
+
+            <div
+              v-else-if="versionDiffData && versionDiffStats.added === 0 && versionDiffStats.removed === 0"
+              class="vdiff-empty"
+            >
+              <i class="fa-solid fa-circle-check vdiff-empty__icon"></i>
+              <p>이전 버전과 내용 차이가 없습니다.</p>
+            </div>
+
+            <div v-else-if="versionDiffData" class="vdiff-body">
+              <div class="vdiff-viewer">
+                <div
+                  v-for="(line, idx) in versionDiffLines"
+                  :key="idx"
+                  :class="['vdiff-line', 'vdiff-line--' + line.type]"
+                >
+                  <span class="vdiff-line__gutter">
+                    <i v-if="line.type === 'add'" class="fa-solid fa-plus"></i>
+                    <i v-else-if="line.type === 'remove'" class="fa-solid fa-minus"></i>
+                  </span>
+                  <span class="vdiff-line__text" v-html="line.text || '&nbsp;'"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </Teleport>
 
       <div class="workspace-assets">
@@ -2116,4 +2313,250 @@ html.dark .version-preview__title { color: #e5e7eb; }
   padding: 10px 12px;
 }
 html.dark .version-preview__content { background: #2d2d2d; }
+
+/* ─── 버전 목록 힌트 ──────────────────────────────────────── */
+.version-history-list__hint {
+  display: block;
+  margin-top: 5px;
+  font-size: 11px;
+  color: #9ca3af;
+  font-style: italic;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   버전 Diff 모달
+   ═══════════════════════════════════════════════════════════ */
+.vdiff-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  backdrop-filter: blur(4px);
+}
+
+.vdiff-modal {
+  width: 100%;
+  max-width: 780px;
+  max-height: 90vh;
+  background: #ffffff;
+  border-radius: 20px;
+  box-shadow: 0 32px 80px rgba(15, 23, 42, 0.3);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: vdiff-slide-in 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+html.dark .vdiff-modal {
+  background: #1e1e2e;
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.5);
+}
+
+@keyframes vdiff-slide-in {
+  from { opacity: 0; transform: translateY(-16px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)     scale(1); }
+}
+
+/* 헤더 */
+.vdiff-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 22px 24px 16px;
+  border-bottom: 1px solid #e5e7eb;
+  flex-shrink: 0;
+}
+html.dark .vdiff-header { border-bottom-color: #2d2d3d; }
+
+.vdiff-header__left {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.vdiff-header__icon {
+  font-size: 22px;
+  color: #6366f1;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.vdiff-header__title {
+  font-size: 17px;
+  font-weight: 800;
+  color: #111827;
+  line-height: 1.3;
+  margin: 0 0 4px;
+}
+html.dark .vdiff-header__title { color: #f1f5f9; }
+
+.vdiff-header__compare {
+  font-size: 13px;
+  font-weight: 500;
+  color: #6b7280;
+}
+
+.vdiff-header__sub {
+  font-size: 12px;
+  color: #9ca3af;
+  margin: 0;
+}
+
+.vdiff-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: none;
+  background: #f3f4f6;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 15px;
+  color: #6b7280;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+.vdiff-close:hover { background: #e5e7eb; color: #111827; }
+html.dark .vdiff-close { background: #2d2d3d; color: #9ca3af; }
+html.dark .vdiff-close:hover { background: #3d3d4d; color: #f1f5f9; }
+
+/* 통계 배지 */
+.vdiff-stats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 24px;
+  background: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+  flex-shrink: 0;
+}
+html.dark .vdiff-stats { background: #181824; border-bottom-color: #2d2d3d; }
+
+.vdiff-stats__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.vdiff-stats__badge i { font-size: 10px; }
+.vdiff-stats__badge--add    { background: rgba(22, 163, 74, 0.12);  color: #15803d; }
+.vdiff-stats__badge--remove { background: rgba(220, 38, 38, 0.12);  color: #dc2626; }
+.vdiff-stats__badge--equal  { background: rgba(107, 114, 128, 0.1); color: #6b7280; }
+
+/* 로딩 */
+.vdiff-loading {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 60px 20px;
+  color: #6b7280;
+  font-size: 14px;
+}
+.vdiff-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid #e5e7eb;
+  border-top-color: #6366f1;
+  border-radius: 50%;
+  animation: vdiff-spin 0.8s linear infinite;
+}
+@keyframes vdiff-spin { to { transform: rotate(360deg); } }
+
+/* 변경 없음 */
+.vdiff-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 60px 20px;
+  color: #6b7280;
+  font-size: 14px;
+  text-align: center;
+}
+.vdiff-empty__icon { font-size: 40px; color: #22c55e; }
+
+/* Diff 뷰어 */
+.vdiff-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 0;
+}
+
+.vdiff-viewer {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace;
+  font-size: 13.5px;
+  line-height: 1.65;
+}
+
+.vdiff-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  padding: 1px 0;
+  transition: background 0.1s;
+}
+
+.vdiff-line--add {
+  background: rgba(22, 163, 74, 0.08);
+}
+.vdiff-line--add:hover {
+  background: rgba(22, 163, 74, 0.14);
+}
+
+.vdiff-line--remove {
+  background: rgba(220, 38, 38, 0.08);
+}
+.vdiff-line--remove:hover {
+  background: rgba(220, 38, 38, 0.14);
+}
+
+.vdiff-line--equal {
+  background: transparent;
+}
+
+.vdiff-line__gutter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  flex-shrink: 0;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.vdiff-line--add    .vdiff-line__gutter { color: #16a34a; }
+.vdiff-line--remove .vdiff-line__gutter { color: #dc2626; }
+.vdiff-line--equal  .vdiff-line__gutter { color: #d1d5db; }
+
+.vdiff-line__text {
+  flex: 1;
+  padding: 2px 16px 2px 0;
+  word-break: break-all;
+  white-space: pre-wrap;
+  color: #1f2937;
+}
+html.dark .vdiff-line__text { color: #e5e7eb; }
+
+.vdiff-line--add    .vdiff-line__text { color: #166534; }
+.vdiff-line--remove .vdiff-line__text { color: #991b1b; text-decoration: line-through; opacity: 0.8; }
+
+html.dark .vdiff-line--add    .vdiff-line__text { color: #86efac; }
+html.dark .vdiff-line--remove .vdiff-line__text { color: #fca5a5; }
+
+html.dark .vdiff-line--add    { background: rgba(22, 163, 74, 0.12); }
+html.dark .vdiff-line--remove { background: rgba(220, 38, 38, 0.12); }
 </style>
+

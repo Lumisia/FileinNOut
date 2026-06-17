@@ -53,21 +53,21 @@ public class SseService {
     }
 
     void deliverEventToUser(Long userId, String eventName, String payloadJson) {
-        SseEmitter emitter = emitterStore.get(userId);
-        if (emitter == null) return;
-
-        try {
-            emitter.send(SseEmitter.event()
-                    .name(eventName)
-                    .data(payloadJson));
-        } catch (IOException e) {
-            emitterStore.remove(userId);
-            emitter.completeWithError(e);
+        // 한 사용자의 모든 활성 연결(여러 탭/기기)에 전송한다.
+        for (SseEmitter emitter : emitterStore.get(userId)) {
+            try {
+                emitter.send(SseEmitter.event()
+                        .name(eventName)
+                        .data(payloadJson));
+            } catch (IOException | IllegalStateException e) {
+                // 끊긴 연결은 completeWithError가 onError 콜백을 통해 store에서 제거한다.
+                emitter.completeWithError(e);
+            }
         }
     }
 
     public boolean isConnected(Long userId) {
-        return emitterStore.getEmitters().containsKey(userId);
+        return emitterStore.isConnected(userId);
     }
 
     private void publish(Long userId, String eventName, String payloadJson) {
