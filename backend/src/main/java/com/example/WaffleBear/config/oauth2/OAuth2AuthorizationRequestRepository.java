@@ -19,10 +19,17 @@ public class OAuth2AuthorizationRequestRepository implements AuthorizationReques
 
     @Override
     public OAuth2AuthorizationRequest loadAuthorizationRequest(HttpServletRequest request) {
-        for (Cookie cookie : request.getCookies()) {
+        Cookie[] cookies = request.getCookies();
+        if (cookies == null) {
+            return null;
+        }
+
+        for (Cookie cookie : cookies) {
             if (cookie.getName().equals("OAUTH2_REQUEST")) {
                 OAuth2AuthorizationRequest oAuth2AuthorizationRequest =
-                        (OAuth2AuthorizationRequest) SerializationUtils.deserialize(cookie.getValue().getBytes());
+                        (OAuth2AuthorizationRequest) SerializationUtils.deserialize(
+                                Aes256.decrypt(cookie.getValue().getBytes(StandardCharsets.UTF_8))
+                        );
                 return oAuth2AuthorizationRequest;
             }
         }
@@ -42,7 +49,12 @@ public class OAuth2AuthorizationRequestRepository implements AuthorizationReques
 
     @Override
     public OAuth2AuthorizationRequest removeAuthorizationRequest(HttpServletRequest request, HttpServletResponse response) {
-        for (Cookie cookie : request.getCookies()) {
+        Cookie[] cookies = request.getCookies();
+        if (cookies == null) {
+            return null;
+        }
+
+        for (Cookie cookie : cookies) {
             if (cookie.getName().equals("OAUTH2_REQUEST")) {
                 OAuth2AuthorizationRequest oAuth2AuthorizationRequest =
                         (OAuth2AuthorizationRequest) SerializationUtils.deserialize(

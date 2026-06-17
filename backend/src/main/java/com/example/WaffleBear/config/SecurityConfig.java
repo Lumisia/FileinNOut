@@ -52,6 +52,8 @@ public class SecurityConfig {
             config.userInfoEndpoint(
                     endpoint -> endpoint.userService(oAuth2UserService)
             );
+            config.failureHandler((request, response, exception) ->
+                    response.sendRedirect(frontendUrl + "/login?error=oauth2"));
             config.successHandler(oAuth2AuthenticationSuccessHandler);
         });
 
