@@ -124,6 +124,23 @@ test('single-node scheduling can disable worker-only affinity', () => {
   }
 })
 
+test('public ingress keeps API root private and redirects Swagger root', () => {
+  const unified = readRepoFile('cicd/helm/templates/unified-ingress.yaml')
+  assert.match(unified, /path:\s*\/api\/swagger-ui/)
+  assert.match(unified, /path:\s*\/api\/swagger-ui\.html/)
+  assert.match(unified, /path:\s*\/api\/v3\/api-docs/)
+
+  const swaggerRedirect = readRepoFile('cicd/helm/templates/swagger-redirect-ingress.yaml')
+  assert.match(swaggerRedirect, /permanent-redirect:\s*https:\/\/\{\{ \$swaggerHost \}\}\/api\/swagger-ui\/index\.html/)
+  assert.match(swaggerRedirect, /path:\s*\/\r?\n\s*pathType:\s*Exact/)
+  assert.match(swaggerRedirect, /path:\s*\/swagger-ui\r?\n\s*pathType:\s*Prefix/)
+
+  const apiRedirect = readRepoFile('cicd/helm/templates/api-redirect-ingress.yaml')
+  assert.match(apiRedirect, /permanent-redirect:\s*https:\/\/\{\{ \$frontendHost \}\}\/login/)
+  assert.match(apiRedirect, /path:\s*\/\r?\n\s*pathType:\s*Exact/)
+  assert.match(apiRedirect, /path:\s*\/api\/login\r?\n\s*pathType:\s*Exact/)
+})
+
 test('app Dockerfiles use ARM64-capable base images for OCI aarch64 nodes', () => {
   // OCI Ampere A1 nodes are aarch64. eclipse-temurin alpine tags are not published
   // for arm64 ("no match for platform in manifest"), so the backend image must use a
