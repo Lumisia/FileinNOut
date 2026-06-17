@@ -53,4 +53,39 @@ class OAuth2AuthorizationRequestRepositoryTest {
         assertThat(repository.loadAuthorizationRequest(request)).isNull();
         assertThat(repository.removeAuthorizationRequest(request, new MockHttpServletResponse())).isNull();
     }
+
+    @Test
+    void savesCookieScopedToConfiguredParentDomain() {
+        // 프론트(lumisia.*)에서 시작해 API(api.*)로 콜백될 때 쿠키를 공유하려면 상위 도메인이 필요하다.
+        // 입력에 앞 점이 있어도(.fileinnout.com) Tomcat이 거부하지 않도록 점은 제거되어야 한다.
+        repository.setCookieDomain(".fileinnout.com");
+
+        OAuth2AuthorizationRequest authorizationRequest = OAuth2AuthorizationRequest.authorizationCode()
+                .authorizationUri("https://nid.naver.com/oauth2.0/authorize")
+                .clientId("naver-client")
+                .redirectUri("https://api.fileinnout.com/api/login/oauth2/code/naver")
+                .state("state-123")
+                .build();
+
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        repository.saveAuthorizationRequest(authorizationRequest, new MockHttpServletRequest(), response);
+
+        Cookie cookie = response.getCookie("OAUTH2_REQUEST");
+        assertThat(cookie).isNotNull();
+        assertThat(cookie.getDomain()).isEqualTo("fileinnout.com");
+
+        // 같은 상위 도메인을 공유하는 콜백 요청에서 인가 요청이 정상 로드된다.
+        MockHttpServletRequest callbackRequest = new MockHttpServletRequest();
+        callbackRequest.setCookies(cookie);
+        assertThat(repository.loadAuthorizationRequest(callbackRequest)).isNotNull();
+    }
+
+    @Test
+    void normalizeCookieDomainStripsLeadingDots() {
+        assertThat(OAuth2AuthorizationRequestRepository.normalizeCookieDomain(".fileinnout.com")).isEqualTo("fileinnout.com");
+        assertThat(OAuth2AuthorizationRequestRepository.normalizeCookieDomain("fileinnout.com")).isEqualTo("fileinnout.com");
+        assertThat(OAuth2AuthorizationRequestRepository.normalizeCookieDomain("  .fileinnout.com  ")).isEqualTo("fileinnout.com");
+        assertThat(OAuth2AuthorizationRequestRepository.normalizeCookieDomain(null)).isEqualTo("");
+        assertThat(OAuth2AuthorizationRequestRepository.normalizeCookieDomain("")).isEqualTo("");
+    }
 }

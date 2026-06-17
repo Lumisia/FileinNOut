@@ -1,4 +1,5 @@
 const GIGABYTE = 1024 ** 3;
+const MEGABYTE = 1024 ** 2;
 
 const MEMBERSHIP_RANK = {
   FREE: 0,
@@ -10,8 +11,8 @@ export const MEMBERSHIP_CAPABILITIES = {
   FREE: {
     shareEnabled: false,
     fileLockEnabled: false,
-    maxUploadFileBytes: 5 * GIGABYTE,
-    maxUploadCount: 30,
+    maxUploadFileBytes: 100 * MEGABYTE,
+    maxUploadCount: 1,
   },
   PLUS: {
     shareEnabled: true,
@@ -45,17 +46,17 @@ export const MEMBERSHIP_PRODUCTS = [
     code: "FREE",
     category: "membership",
     name: "Free",
-    label: "기본 20GB",
+    label: "기본 100MB",
     description: "가볍게 시작하는 기본 멤버십입니다. 저장 공간만 제공되며 추가 기능은 포함되지 않습니다.",
-    quotaLabel: "20GB",
+    quotaLabel: "100MB",
     price: 0,
     badge: "기본 제공",
     features: [
-      "추가 저장 공간 20GB",
+      "추가 저장 공간 100MB",
       "파일 잠금 기능 없음",
       "파일 공유 기능 없음",
-      "한 번에 최대 30개 업로드",
-      "파일당 최대 5GB 업로드",
+      "한 번에 최대 1개 업로드",
+      "파일당 최대 100MB 업로드",
     ],
   },
   {

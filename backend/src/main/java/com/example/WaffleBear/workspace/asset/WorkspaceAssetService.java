@@ -8,6 +8,7 @@ import com.example.WaffleBear.file.FileUpDownloadRepository;
 import com.example.WaffleBear.file.dto.FileCommonDto;
 import com.example.WaffleBear.file.model.FileInfo;
 import com.example.WaffleBear.file.model.FileNodeType;
+import com.example.WaffleBear.file.service.StoragePlanService;
 import com.example.WaffleBear.user.model.User;
 import com.example.WaffleBear.user.repository.UserRepository;
 import com.example.WaffleBear.workspace.asset.model.WorkspaceAsset;
@@ -56,6 +57,7 @@ public class WorkspaceAssetService {
     private final MinioClient minioClient;
     private final MinioProperties minioProperties;
     private final ClusteredStompPublisher stompPublisher;
+    private final StoragePlanService storagePlanService;
 
     /**
      * 여러 파일을 한번에 업로드 (일반 에셋용)
@@ -307,6 +309,8 @@ public class WorkspaceAssetService {
         WorkspaceAsset asset = workspaceAssetRepository
                 .findByIdxAndWorkspace_Idx(assetIdx, permission.workspace().getIdx())
                 .orElseThrow(() -> BaseException.from(BaseResponseStatus.REQUEST_ERROR));
+
+        ensureWithinDriveQuota(userIdx, asset.getFileSize());
 
         FileInfo parentFolder  = resolveParentFolder(userIdx, parentId);
         String targetBucket    = resolveDriveBucketName();       // bucket_cloud
@@ -662,6 +666,45 @@ public class WorkspaceAssetService {
         }
 
         return parent;
+    }
+
+    private void ensureWithinDriveQuota(Long userIdx, Long additionalBytes) {
+        StoragePlanService.StorageQuota storageQuota = storagePlanService.resolveQuota(userIdx);
+        ensureWithinFreeStoredFileCount(userIdx, storageQuota);
+
+        long quotaBytes = storageQuota.totalQuotaBytes();
+        long usedBytes = resolveUsedStorageBytes(userIdx);
+        long safeAdditionalBytes = Math.max(0L, additionalBytes == null ? 0L : additionalBytes);
+
+        if (quotaBytes > 0 && usedBytes + safeAdditionalBytes > quotaBytes) {
+            throw BaseException.from(BaseResponseStatus.STORAGE_QUOTA_EXCEEDED);
+        }
+    }
+
+    private long resolveUsedStorageBytes(Long userIdx) {
+        Long usedBytes = fileUpDownloadRepository.sumStoredFileBytesByUser(userIdx, FileNodeType.FILE);
+        return Math.max(0L, usedBytes == null ? 0L : usedBytes);
+    }
+
+    private void ensureWithinFreeStoredFileCount(Long userIdx, StoragePlanService.StorageQuota storageQuota) {
+        if (storageQuota == null || !"FREE".equalsIgnoreCase(storageQuota.planCode())) {
+            return;
+        }
+
+        long maxFileCount = storageQuota.maxUploadCount();
+        if (maxFileCount <= 0) {
+            return;
+        }
+
+        long storedFileCount = resolveStoredFileCount(userIdx);
+        if (storedFileCount + 1L > maxFileCount) {
+            throw BaseException.from(BaseResponseStatus.FILE_COUNT_WRONG);
+        }
+    }
+
+    private long resolveStoredFileCount(Long userIdx) {
+        Long storedFileCount = fileUpDownloadRepository.countStoredFilesByUser(userIdx, FileNodeType.FILE);
+        return Math.max(0L, storedFileCount == null ? 0L : storedFileCount);
     }
 
     private String resolveWorkspaceUserFolder(Long userIdx) {

@@ -37,6 +37,11 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url)),
+        // Legacy `stompjs` pulls in the Node-only `net` / `websocket` modules via
+        // lib/stomp-node.js. The browser uses SockJS + native WebSocket, so stub them
+        // out to keep bare "net"/"websocket" specifiers out of the browser bundle.
+        websocket: fileURLToPath(new URL('./src/shims/empty-module.js', import.meta.url)),
+        net: fileURLToPath(new URL('./src/shims/empty-module.js', import.meta.url)),
       },
     },
   }
