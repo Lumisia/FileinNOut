@@ -92,6 +92,53 @@ test('environment ConfigMaps render every value as a Kubernetes string', () => {
   }
 })
 
+test('backend credentials render into a Secret, not the ConfigMap', () => {
+  const values = readRepoFile('cicd/helm/values.yaml')
+  const configmap = readRepoFile('cicd/helm/templates/backend-configmap.yaml')
+  const secret = readRepoFile('cicd/helm/templates/backend-secret.yaml')
+  const deployment = readRepoFile('cicd/helm/templates/backend-deployment.yaml')
+
+  // 자격증명 키 목록이 values에 선언되어 있어야 한다.
+  assert.match(values, /secretKeys:/)
+  for (const key of ['JWT_KEY', 'DB_PASS', 'MINIO_SECRET', 'MINIO_NAME', 'MAIL_PASS', 'NAVER_CLIENT_SECRET', 'ADMIN_PASSWORD', 'PORTONE_SECRET', 'S3AMAZON_SECRET']) {
+    assert.match(values, new RegExp(`secretKeys:[\\s\\S]*- ${key}`))
+  }
+
+  // ConfigMap은 secretKeys를 제외하고 렌더링한다.
+  assert.match(configmap, /if not \(has \$key \$secretKeys\)/)
+
+  // Secret은 secretKeys만 렌더링한다(Opaque + stringData).
+  assert.match(secret, /kind:\s*Secret/)
+  assert.match(secret, /type:\s*Opaque/)
+  assert.match(secret, /stringData:/)
+  assert.match(secret, /if has \$key \$secretKeys/)
+  assert.match(secret, /backend-secret/)
+
+  // 배포는 ConfigMap과 Secret을 모두 주입하고, Secret 변경 시 롤링되도록 checksum을 건다.
+  assert.match(deployment, /secretRef:[\s\S]*backend-secret/)
+  assert.match(deployment, /checksum\/backend-secret:/)
+})
+
+test('MariaDB and MinIO read their shared credentials from the Secret, not the ConfigMap', () => {
+  const mariadb = readRepoFile('cicd/helm/templates/mariadb-statefulset.yaml')
+  const minio = readRepoFile('cicd/helm/templates/minio-statefulset.yaml')
+  const bootstrap = readRepoFile('cicd/helm/templates/mariadb-bootstrap-job.yaml')
+
+  // DB_ID/DB_PASS는 backend-env에서 옮겨졌으므로 모든 소비처가 Secret을 봐야 한다.
+  // (그렇지 않으면 MariaDB/MinIO가 없는 ConfigMap 키를 참조해 기동 불가가 된다.)
+  assert.match(mariadb, /MARIADB_USER[\s\S]*secretKeyRef:[\s\S]*backend-secret[\s\S]*key:\s*DB_ID/)
+  assert.match(mariadb, /MARIADB_PASSWORD[\s\S]*secretKeyRef:[\s\S]*backend-secret[\s\S]*key:\s*DB_PASS/)
+  // DB_PASS는 더 이상 configMapKeyRef 블록 안에 있으면 안 된다(인접 패턴으로 정확히 확인).
+  assert.doesNotMatch(mariadb, /configMapKeyRef:\s+name:[^\n]*\s+key:\s*DB_PASS/)
+
+  assert.match(minio, /MINIO_ROOT_USER[\s\S]*secretKeyRef:[\s\S]*backend-secret[\s\S]*key:\s*MINIO_NAME/)
+  assert.match(minio, /MINIO_ROOT_PASSWORD[\s\S]*secretKeyRef:[\s\S]*backend-secret[\s\S]*key:\s*MINIO_SECRET/)
+  assert.doesNotMatch(minio, /configMapKeyRef:\s+name:[^\n]*\s+key:\s*MINIO_SECRET/)
+
+  // bootstrap Job은 DB_ID/DB_PASS로 user 비밀번호를 재설정하므로 Secret도 주입받아야 한다.
+  assert.match(bootstrap, /secretRef:[\s\S]*backend-secret/)
+})
+
 test('Helm templates can render standard Deployments without Argo Rollouts', () => {
   for (const file of [
     'cicd/helm/templates/backend-deployment.yaml',
