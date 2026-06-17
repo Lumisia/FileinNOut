@@ -76,24 +76,25 @@ ready.
 
 | Domain | Target |
 |---|---|
-| `app.example.com` | Frontend site |
-| `api.example.com` | Backend API and realtime HTTP endpoints |
-| `swagger.example.com` | Backend Swagger UI and OpenAPI docs |
-| `jenkins.example.com` | Jenkins UI, usually outside this app Helm chart |
-| `kiali.example.com` | Kiali UI, installed with the Istio/Kiali stack |
-| `jaeger.example.com` | Jaeger tracing UI, installed with the observability stack |
+| `lumisia.fileinnout.com` | Frontend site |
+| `api.fileinnout.com` | Backend API and realtime HTTP endpoints |
+| `swagger.fileinnout.com` | Backend Swagger UI and OpenAPI docs |
+| `jenkins.fileinnout.com` | Jenkins UI, protected only |
+| `kiali.fileinnout.com` | Public Kiali read-only UI |
+| `jaeger.fileinnout.com` | Public Jaeger query UI |
 
 Suggested public URLs:
 
-- Site: `https://app.example.com`
-- API: `https://api.example.com/api`
-- Swagger: `https://swagger.example.com/swagger-ui/index.html`
-- Kiali: `https://kiali.example.com`
-- Jaeger: `https://jaeger.example.com`
+- Site: `https://lumisia.fileinnout.com`
+- API: `https://api.fileinnout.com/api`
+- Swagger: `https://swagger.fileinnout.com/api/swagger-ui/index.html`
+- Kiali: `https://kiali.fileinnout.com`
+- Jaeger: `https://jaeger.fileinnout.com`
 
-Protect `jenkins.example.com`, `kiali.example.com`, and `jaeger.example.com`
-with Cloudflare Access or an equivalent authentication layer. These are operator
-surfaces, not public product pages.
+Jenkins must never be directly public. Protect `jenkins.fileinnout.com` with
+Cloudflare Access, SSH tunneling, or an equivalent authentication layer. Kiali
+and Jaeger are intentionally public for portfolio visitors, but they must remain
+read-only and must not expose sensitive trace or request data.
 
 If using Cloudflare Tunnel, start from
 `cicd/cloudflare/cloudflared-config.example.yml`. Jenkins routes to
@@ -102,9 +103,9 @@ k3s ingress on `localhost:80`.
 
 ## Visitor Read-only Accounts
 
-Use Cloudflare Access in front of `jenkins.example.com`, `kiali.example.com`,
-and `jaeger.example.com` so only approved visitor emails can reach those tools.
-After that, still keep each tool read-only.
+Use Cloudflare Access in front of `jenkins.fileinnout.com` so only approved
+visitor emails can reach Jenkins. Kiali and Jaeger are public in this portfolio
+profile; keep them read-only at the application/service level.
 
 For Jenkins:
 
@@ -121,15 +122,15 @@ For Jenkins:
 This lets visitors see the Jenkins dashboard and job history without starting a
 deployment, editing a pipeline, or reading deployment secrets.
 
-For Kiali, keep Cloudflare Access enabled and set `deployment.view_only_mode:
-true` in `cicd/observability/values-kiali-operator-k3s.yaml`. This profile uses
-Kiali anonymous auth behind Access, so the visitor account lives at Cloudflare
-Access and Kiali itself stays read-only.
+For Kiali, set `deployment.view_only_mode: true` in
+`cicd/observability/values-kiali-operator-k3s.yaml`. This profile uses Kiali
+anonymous auth with view-only mode, so the public UI can be inspected without
+granting write access to mesh resources.
 
-For Jaeger, use Cloudflare Access instead of an in-app visitor account. Jaeger
-all-in-one does not provide a separate visitor account in this profile. Only
-expose the `jaeger-query` UI service, and do not expose the `jaeger-collector`
-service or OTLP ports to the public internet.
+For Jaeger, do not create a fake in-app visitor account. Jaeger all-in-one does
+not provide a separate visitor account in this profile. You should only expose the
+`jaeger-query` UI service, and do not expose the `jaeger-collector` service or
+OTLP ports to the public internet.
 
 ## Observability Stack
 
@@ -140,10 +141,10 @@ before using Kiali:
 2. Prometheus with short retention
 3. Jaeger all-in-one with memory storage
 4. Kiali operator
-5. Cloudflare-protected ingress for Kiali and Jaeger
+5. Public read-only ingress for Kiali and Jaeger
 
 Follow: `cicd/observability/README.md`
-- Jenkins: `https://jenkins.example.com`
+- Jenkins: `https://jenkins.fileinnout.com`
 
 ## Helm Command
 

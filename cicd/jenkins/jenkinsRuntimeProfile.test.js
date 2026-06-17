@@ -58,7 +58,7 @@ test('Cloudflare Tunnel example routes public domains to local services', () => 
   assert.match(config, /service:\s*http_status:404/)
 })
 
-test('Cloudflare docs describe Tunnel routing and protected admin apps', () => {
+test('Cloudflare docs describe Tunnel routing, protected Jenkins, and public observability', () => {
   assert.equal(fileExists('cicd/cloudflare/README.md'), true)
 
   const readme = readRepoFile('cicd/cloudflare/README.md')
@@ -69,6 +69,10 @@ test('Cloudflare docs describe Tunnel routing and protected admin apps', () => {
   assert.match(readme, /kiali\.example\.com/)
   assert.match(readme, /jaeger\.example\.com/)
   assert.match(readme, /Cloudflare Access/)
+  assert.match(readme, /Cloudflare Access self-hosted application for Jenkins/)
+  assert.match(readme, /Keep `app`, `api`, `swagger`,[\s\S]*`kiali`, and `jaeger` public/)
+  assert.match(readme, /Kiali still needs `view_only_mode: true`/)
+  assert.match(readme, /Jaeger[\s\S]*only expose the query UI/)
   assert.match(readme, /visitor email/)
 })
 

@@ -33,6 +33,7 @@ test('Kiali operator values point at Prometheus and Jaeger with small resources'
   assert.match(values, /prometheus:[\s\S]*url:\s*"http:\/\/prometheus-server\.observability\.svc\.cluster\.local"/)
   assert.match(values, /tracing:[\s\S]*enabled:\s*true/)
   assert.match(values, /in_cluster_url:\s*"http:\/\/jaeger-query\.observability\.svc\.cluster\.local:16686"/)
+  assert.match(values, /url:\s*"https:\/\/jaeger\.fileinnout\.com"/)
   assert.match(values, /requests:[\s\S]*cpu:\s*"100m"[\s\S]*memory:\s*"256Mi"/)
 })
 
@@ -50,15 +51,21 @@ test('Jaeger all-in-one manifest uses memory storage and OTLP ports', () => {
   assert.match(manifest, /requests:[\s\S]*cpu:\s*"100m"[\s\S]*memory:\s*"256Mi"/)
 })
 
-test('Cloudflare-ready ingress exposes Kiali and Jaeger only via placeholder hosts', () => {
+test('public portfolio ingress persists FileInNOut Kiali and Jaeger hosts', () => {
   assert.equal(fileExists('cicd/observability/ingress.yaml'), true)
 
   const ingress = readRepoFile('cicd/observability/ingress.yaml')
-  assert.match(ingress, /namespace:\s*istio-system[\s\S]*host:\s*kiali\.example\.com/)
-  assert.match(ingress, /namespace:\s*observability[\s\S]*host:\s*jaeger\.example\.com/)
-  assert.match(ingress, /secretName:\s*observability-tls/)
+  assert.match(ingress, /namespace:\s*istio-system[\s\S]*host:\s*kiali\.fileinnout\.com/)
+  assert.match(ingress, /namespace:\s*observability[\s\S]*host:\s*jaeger\.fileinnout\.com/)
   assert.match(ingress, /name:\s*kiali/)
   assert.match(ingress, /name:\s*jaeger-query/)
+  // Kiali's web_root is /kiali, so the bare host must redirect there.
+  assert.match(ingress, /app-root:\s*"?\/kiali"?/)
+  // Cloudflare terminates public HTTPS for these portfolio UIs; the cluster
+  // manifest intentionally matches the currently applied HTTP-only ingresses.
+  assert.doesNotMatch(ingress, /secretName:\s*observability-tls/)
+  assert.doesNotMatch(ingress, /force-ssl-redirect/)
+  assert.doesNotMatch(ingress, /ssl-redirect/)
 })
 
 test('Istio telemetry manifest and docs wire traces to Jaeger without sidecar mode', () => {
@@ -76,10 +83,10 @@ test('Istio telemetry manifest and docs wire traces to Jaeger without sidecar mo
   assert.match(readme, /values\.cni\.cniConfDir=\/var\/lib\/rancher\/k3s\/agent\/etc\/cni\/net\.d/)
   assert.match(readme, /extensionProviders\[0\]\.opentelemetry\.service=jaeger-collector\.observability\.svc\.cluster\.local/)
   assert.match(readme, /kubectl label namespace fileinnout istio\.io\/dataplane-mode=ambient --overwrite/)
-  assert.match(readme, /Do not expose Kiali or Jaeger publicly without Cloudflare Access/)
+  assert.match(readme, /Kiali and Jaeger are intentionally public/)
 })
 
-test('visitor access docs keep Jenkins, Kiali, and Jaeger read-only', () => {
+test('visitor access docs keep Jenkins private and observability UIs read-only', () => {
   assert.equal(fileExists('cicd/observability/README.md'), true)
   assert.equal(fileExists('docs/deployment/oci-k3s-jenkins.md'), true)
 
@@ -88,6 +95,7 @@ test('visitor access docs keep Jenkins, Kiali, and Jaeger read-only', () => {
   const combined = `${readme}\n${deploymentDoc}`
 
   assert.match(combined, /Cloudflare Access/)
+  assert.match(combined, /Jenkins[\s\S]*directly public/)
   assert.match(combined, /Matrix Authorization/)
   assert.match(combined, /Overall\/Read/)
   assert.match(combined, /Job\/Read/)
@@ -98,4 +106,6 @@ test('visitor access docs keep Jenkins, Kiali, and Jaeger read-only', () => {
   assert.match(combined, /Jaeger[\s\S]*does not provide a separate visitor account/)
   assert.match(combined, /only expose[\s\S]*jaeger-query/)
   assert.match(combined, /do not expose[\s\S]*jaeger-collector/)
+  assert.match(readme, /kiali\.fileinnout\.com/)
+  assert.match(readme, /jaeger\.fileinnout\.com/)
 })
