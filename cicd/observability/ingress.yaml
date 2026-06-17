@@ -4,13 +4,13 @@ metadata:
   name: kiali
   namespace: istio-system
   annotations:
-    kubernetes.io/ingress.class: "nginx"
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # Kiali serves under web_root /kiali, so redirect the bare host to it
+    # (otherwise the host root returns 404).
+    nginx.ingress.kubernetes.io/app-root: "/kiali"
 spec:
   ingressClassName: nginx
   rules:
-    - host: kiali.example.com
+    - host: kiali.fileinnout.com
       http:
         paths:
           - path: /
@@ -20,24 +20,16 @@ spec:
                 name: kiali
                 port:
                   number: 20001
-  tls:
-    - hosts:
-        - kiali.example.com
-      secretName: observability-tls
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: jaeger
   namespace: observability
-  annotations:
-    kubernetes.io/ingress.class: "nginx"
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
 spec:
   ingressClassName: nginx
   rules:
-    - host: jaeger.example.com
+    - host: jaeger.fileinnout.com
       http:
         paths:
           - path: /
@@ -47,7 +39,64 @@ spec:
                 name: jaeger-query
                 port:
                   number: 16686
-  tls:
-    - hosts:
-        - jaeger.example.com
-      secretName: observability-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grafana
+  namespace: observability
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: grafana.fileinnout.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: grafana
+                port:
+                  number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: prometheus
+  namespace: observability
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: prometheus.fileinnout.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: prometheus-server
+                port:
+                  number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kubernetes-dashboard
+  namespace: kubernetes-dashboard
+  annotations:
+    # Dashboard serves HTTPS (self-signed) on its service port, so nginx must
+    # speak HTTPS to the backend.
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: dashboard.fileinnout.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: kubernetes-dashboard
+                port:
+                  number: 443

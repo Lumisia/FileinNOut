@@ -11,12 +11,18 @@ metrics, topology, and tracing while keeping the node stable.
 | Component | Purpose | Exposure |
 |---|---|---|
 | Istio ambient | Mesh traffic capture without per-pod sidecars | internal |
-| Prometheus | Metrics backend for Kiali and Istio metrics | internal |
-| Kiali | Mesh graph and service health UI | protected domain |
-| Jaeger all-in-one | Request tracing demo | protected domain |
+| Prometheus | Metrics backend for Kiali, Grafana, and Istio metrics | public read-only UI |
+| Grafana | Dashboards over Prometheus/Jaeger | public read-only (anonymous Viewer) |
+| Kiali | Mesh graph and service health UI | public read-only domain |
+| Jaeger all-in-one | Request tracing demo | public query UI |
+| Kubernetes Dashboard | Cluster/workload viewer | public read-only (view RBAC) |
 
-Do not expose Kiali or Jaeger publicly without Cloudflare Access. They are
-operator/admin surfaces, not public product pages.
+Kiali, Jaeger, Grafana, Prometheus, and the Kubernetes Dashboard are
+intentionally public for this portfolio deployment, but every one of them is
+read-only: Kiali uses `deployment.view_only_mode: true`, Grafana serves
+anonymous `Viewer`, Prometheus exposes only its read-only query UI, and the
+Kubernetes Dashboard is bound to the built-in `view` ClusterRole. Jenkins must
+remain private and must not be directly public.
 
 ## Install Order
 
@@ -94,10 +100,10 @@ kubectl rollout restart deployment -n fileinnout
 
 ### 7. Expose Kiali and Jaeger after Cloudflare DNS is ready
 
-Replace placeholder hosts first:
+This manifest contains the current FileInNOut portfolio hosts:
 
-- `kiali.example.com`
-- `jaeger.example.com`
+- `kiali.fileinnout.com`
+- `jaeger.fileinnout.com`
 
 Then apply:
 
@@ -105,32 +111,84 @@ Then apply:
 kubectl apply -f cicd/observability/ingress.yaml
 ```
 
+Kiali serves under `web_root: /kiali`, so the Kiali ingress carries
+`nginx.ingress.kubernetes.io/app-root: /kiali`. That redirects the bare host
+(`https://kiali.<domain>/`) to the Kiali app instead of returning 404. Jaeger
+`jaeger-query` serves at root, so no rewrite is needed.
+
+These ingress objects were first applied manually on the cluster. They now
+live in this manifest, so a cluster rebuild can restore them with the command
+above. Public access is intentional, but keep traces and demo traffic free of
+tokens, passwords, private file names, or personal data.
+
+The same `ingress.yaml` also publishes the portfolio dashboards:
+
+- `grafana.fileinnout.com` -> `grafana` (observability)
+- `prometheus.fileinnout.com` -> `prometheus-server` (observability)
+- `dashboard.fileinnout.com` -> `kubernetes-dashboard` (HTTPS backend)
+
+### 8. Install Grafana
+
+```bash
+helm repo add grafana https://grafana.github.io/helm-charts
+helm repo update
+
+helm upgrade --install grafana grafana/grafana \
+  --namespace observability \
+  --create-namespace \
+  -f cicd/observability/values-grafana-k3s.yaml
+```
+
+Grafana reuses the running Prometheus, so it adds no scrape load. Visitors land
+as anonymous `Viewer` (read-only). The admin password is generated into a
+Secret:
+
+```bash
+kubectl -n observability get secret grafana -o jsonpath="{.data.admin-password}" | base64 -d
+```
+
+### 9. Make the Kubernetes Dashboard read-only
+
+```bash
+kubectl apply -f cicd/observability/dashboard-readonly-rbac.yaml
+```
+
+The Dashboard is bound to the built-in `view` ClusterRole, which excludes
+Secrets. Either hand visitors a short-lived token
+(`kubectl -n kubernetes-dashboard create token dashboard-viewer`) or enable
+`--enable-skip-login` for fully anonymous read-only access. Keep sensitive
+values in k8s Secrets, never in ConfigMaps, because ConfigMaps are visible to
+`view`.
+
 ## Cloudflare Domain Plan
 
 Common portfolio domains:
 
 | Domain | Use |
 |---|---|
-| `app.your-domain` | public frontend |
-| `api.your-domain` | backend API |
-| `swagger.your-domain` | Swagger UI |
-| `jenkins.your-domain` | Jenkins UI, protected |
-| `kiali.your-domain` | Kiali UI, protected |
-| `jaeger.your-domain` | Jaeger UI, protected |
+| `lumisia.fileinnout.com` | public frontend |
+| `api.fileinnout.com` | backend API |
+| `swagger.fileinnout.com` | Swagger UI |
+| `jenkins.fileinnout.com` | Jenkins UI, private/protected only |
+| `kiali.fileinnout.com` | public Kiali read-only UI |
+| `jaeger.fileinnout.com` | public Jaeger query UI |
+| `grafana.fileinnout.com` | public Grafana read-only dashboards |
+| `prometheus.fileinnout.com` | public Prometheus read-only query UI |
+| `dashboard.fileinnout.com` | public Kubernetes Dashboard, read-only |
 
-Protect `jenkins`, `kiali`, and `jaeger` with Cloudflare Access or another
-authentication layer.
+Protect `jenkins` with Cloudflare Access, SSH tunneling, or another explicit
+authentication layer. Kiali, Jaeger, Grafana, Prometheus, and the Kubernetes
+Dashboard are public by design for the portfolio, so keep them read-only and
+keep sensitive data out of traces, dashboards, and ConfigMaps.
 
 ## Visitor Read-only Access
 
-Use Cloudflare Access as the first gate for portfolio visitors:
+Use Cloudflare Access as the first gate for Jenkins visitors:
 
-1. Create self-hosted applications for `jenkins.your-domain`,
-   `kiali.your-domain`, and `jaeger.your-domain`.
+1. Create a self-hosted application for `jenkins.fileinnout.com`.
 2. Add an Access policy that includes only the visitor email addresses or the
    allowed email domain.
-3. Keep the product-level permissions read-only after Access lets the visitor
-   through.
+3. Keep Jenkins permissions read-only after Access lets the visitor through.
 
 For Kiali, this profile uses:
 
@@ -141,15 +199,40 @@ deployment:
   view_only_mode: true
 ```
 
-That means Cloudflare Access decides who can enter, and Kiali itself stays in
-read-only mode for anyone who enters. If per-user Kiali identity is needed
-later, replace anonymous auth with OIDC or a header-based auth proxy.
+That means Kiali is public but cannot be used to change mesh resources through
+the UI. If per-user Kiali identity is needed later, put it behind Cloudflare
+Access and replace anonymous auth with OIDC or a header-based auth proxy.
 
 For Jaeger, do not create a fake in-app visitor account. Jaeger all-in-one in
-this profile does not provide a separate visitor account model. Make it
-read-only behind Cloudflare Access: only expose the `jaeger-query` UI, and do
-not expose the internal `jaeger-collector` service or OTLP ports publicly. The
-current ingress points to `jaeger-query` only.
+this profile does not provide a separate visitor account model. Public access
+is limited to the `jaeger-query` UI; do not expose the internal
+`jaeger-collector` service or OTLP ports publicly. The current ingress points
+to `jaeger-query` only.
+
+For Grafana, visitors use the native anonymous account:
+
+```yaml
+grafana.ini:
+  auth.anonymous:
+    enabled: true
+    org_role: Viewer
+```
+
+Anonymous `Viewer` can read dashboards but cannot edit, save, or administer.
+The admin login form stays available for the operator only, and its password
+lives in the generated `grafana` Secret (never in this repo).
+
+For Prometheus, there is no user/role model. The UI is read-only by default
+(admin API and lifecycle endpoints stay disabled), so "visitor account" does
+not apply; the only control is who can reach the host. Limit reach with
+Cloudflare Access if needed, and remember the query UI exposes internal target
+addresses, service names, and label cardinality.
+
+For the Kubernetes Dashboard, the visitor identity is a read-only
+ServiceAccount bound to the built-in `view` ClusterRole (excludes Secrets) via
+`dashboard-readonly-rbac.yaml`. Either issue a short-lived token for that SA or
+enable `--enable-skip-login` for anonymous read-only viewing. Keep secrets in
+k8s Secrets, not ConfigMaps, since `view` can read ConfigMaps.
 
 ## Resource Budget
 
@@ -158,6 +241,7 @@ Recommended requests and limits:
 | Component | Request | Limit |
 |---|---|---|
 | Prometheus | `200m / 512Mi` | `800m / 1Gi` |
+| Grafana | `100m / 128Mi` | `200m / 256Mi` |
 | Kiali | `100m / 256Mi` | `300m / 512Mi` |
 | Jaeger all-in-one | `100m / 256Mi` | `500m / 768Mi` |
 
