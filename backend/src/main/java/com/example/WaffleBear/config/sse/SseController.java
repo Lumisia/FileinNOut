@@ -12,6 +12,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 
 import java.io.IOException;
+import java.util.UUID;
 
 @RestController
 @RequiredArgsConstructor
@@ -32,20 +33,22 @@ public class SseController {
         }
 
         Long userIdx = user.getIdx();
+        // 연결마다 고유 id를 부여해 같은 사용자의 다른 연결과 독립적으로 관리한다.
+        String connectionId = UUID.randomUUID().toString();
 
         SseEmitter emitter = new SseEmitter(60 * 1000L * 60);
-        emitterStore.put(userIdx, emitter);
+        emitterStore.put(userIdx, connectionId, emitter);
 
         // 연결 종료나 타임아웃 발생 시 Map에서 제거 (중요: 메모리 누수 방지)
-        emitter.onCompletion(() -> emitterStore.remove(userIdx));
-        emitter.onTimeout(() -> emitterStore.remove(userIdx));
-        emitter.onError((e) -> emitterStore.remove(userIdx));
+        emitter.onCompletion(() -> emitterStore.remove(userIdx, connectionId));
+        emitter.onTimeout(() -> emitterStore.remove(userIdx, connectionId));
+        emitter.onError((e) -> emitterStore.remove(userIdx, connectionId));
 
         try {
             emitter.send(SseEmitter.event().name(
                     user.getName()+" => SSE").data("연결 성공"));
         }catch (IOException e) {
-            emitterStore.remove(userIdx);
+            emitterStore.remove(userIdx, connectionId);
         }
         return emitter;
     }

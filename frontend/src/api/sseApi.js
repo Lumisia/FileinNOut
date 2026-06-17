@@ -1,120 +1,37 @@
 import { EventSourcePolyfill } from 'event-source-polyfill'
 import { apiPath } from '@/utils/backendUrl'
+import {
+  createSseConnection as createSseConnectionCore,
+  SSE_EVENT_FORWARD_MAP,
+} from './sseConnection.js'
 
-const SSE_OPTIONS = {
-  heartbeatTimeout: 3600000,
-}
+// SSE는 이벤트가 없으면 바이트가 흐르지 않아 프록시/CDN이 idle로 끊을 수 있다.
+// heartbeatTimeout을 넉넉히 잡아 polyfill이 성급히 끊지 않게 한다(서버도 주기적 ping 전송).
+const SSE_OPTIONS = { heartbeatTimeout: 3600000 }
 
-const getAuthHeaders = () => {
+const browserAuthHeaders = () => {
   const token = typeof window !== 'undefined' ? localStorage.getItem('ACCESS_TOKEN') : null
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
-const isFatalError = (eventSource) => eventSource.readyState === EventSourcePolyfill.CLOSED
-
-const connectNotificationSse = ({ onNotification, onNewMessage, onError } = {}) => {
-  const eventSource = new EventSourcePolyfill(apiPath('/sse/connect'), {
-    headers: getAuthHeaders(),
-    withCredentials: true,
-    ...SSE_OPTIONS,
-  })
-
-  eventSource.addEventListener('notification', (e) => {
-    try {
-      const payload = JSON.parse(e.data)
-      if (onNotification) onNotification(payload)
-    } catch (err) {
-      console.error('[SSE:notification] 이벤트 파싱 오류:', err)
-    }
-  })
-
-  eventSource.addEventListener('new-message', (e) => {
-    try {
-      const payload = JSON.parse(e.data)
-      if (onNewMessage) onNewMessage(payload)
-    } catch (err) {
-      console.error('[SSE:new-message] 이벤트 파싱 오류:', err)
-    }
-  })
-
-  eventSource.addEventListener('title-updated', (e) => {
-    try {
-      const payload = JSON.parse(e.data)
-      window.dispatchEvent(new CustomEvent('sse-title-updated', { detail: payload }))
-    } catch (err) {
-      console.error('[SSE:title-updated] 이벤트 파싱 오류:', err)
-    }
-  })
-
-  eventSource.addEventListener('role-changed', (e) => {
-    try {
-      const payload = JSON.parse(e.data)
-      window.dispatchEvent(new CustomEvent('sse-role-changed', { detail: payload }))
-    } catch (err) {
-      console.error('[SSE:role-changed] 이벤트 파싱 오류:', err)
-    }
-  })
-
-  eventSource.onerror = (error) => {
-    if (!isFatalError(eventSource)) return
-    console.error('[SSE] 연결 오류 (fatal):', error)
-    eventSource.close()
-    if (onError) onError(error)
-  }
-
-  return eventSource
+const browserDispatch = (eventName, detail) => {
+  window.dispatchEvent(new CustomEvent(eventName, { detail }))
 }
 
-const connectWorkspaceSse = ({ userId, onConnect, onTitleUpdated, onError } = {}) => {
-  const eventSource = new EventSourcePolyfill(apiPath('/sse/connect'), {
-    headers: getAuthHeaders(),
-    withCredentials: true,
-    ...SSE_OPTIONS,
+// 앱 전체에서 단 하나의 실시간 SSE 연결을 연다.
+// 모든 서버 이벤트는 window CustomEvent로 재방출되어 각 컴포넌트가 구독한다.
+const createSseConnection = ({ onConnect } = {}) =>
+  createSseConnectionCore({
+    url: apiPath('/sse/connect'),
+    EventSourceImpl: EventSourcePolyfill,
+    closedState: EventSourcePolyfill.CLOSED,
+    getAuthHeaders: browserAuthHeaders,
+    dispatch: browserDispatch,
+    onConnect,
+    eventSourceOptions: SSE_OPTIONS,
   })
-
-  eventSource.onopen = (event) => {
-    console.log('[SSE] 워크스페이스 연결 성공 (userId:', userId, ')')
-    if (onConnect) onConnect(event)
-  }
-
-  eventSource.addEventListener('title-updated', (event) => {
-    try {
-      const updatedData = JSON.parse(event.data)
-      window.dispatchEvent(new CustomEvent('sse-title-updated', { detail: updatedData }))
-      if (onTitleUpdated) onTitleUpdated(updatedData)
-    } catch (e) {
-      console.error('[SSE:title-updated] 이벤트 파싱 오류:', e)
-    }
-  })
-
-  eventSource.addEventListener('role-changed', (e) => {
-    try {
-      const payload = JSON.parse(e.data)
-      window.dispatchEvent(new CustomEvent('sse-role-changed', { detail: payload }))
-    } catch (err) {
-      console.error('[SSE:role-changed] 이벤트 파싱 오류:', err)
-    }
-  })
-
-  eventSource.onerror = (error) => {
-    if (!isFatalError(eventSource)) return
-    console.error('[SSE] 워크스페이스 연결 오류 (fatal):', error)
-    eventSource.close()
-    if (onError) onError(error)
-  }
-
-  return eventSource
-}
-
-const closeSse = (eventSource) => {
-  if (eventSource && typeof eventSource.close === 'function') {
-    eventSource.close()
-    console.log('[SSE] 연결을 정상적으로 종료했습니다.')
-  }
-}
 
 export default {
-  connectNotificationSse,
-  connectWorkspaceSse,
-  closeSse,
+  createSseConnection,
+  SSE_EVENT_FORWARD_MAP,
 }
