@@ -25,7 +25,21 @@ public class OAuth2AuthorizationRequestRepository implements AuthorizationReques
 
     @Value("${app.cookie-domain:}")
     public void setCookieDomain(String cookieDomain) {
-        this.cookieDomain = cookieDomain == null ? "" : cookieDomain.trim();
+        this.cookieDomain = normalizeCookieDomain(cookieDomain);
+    }
+
+    // Tomcat의 Rfc6265CookieProcessor는 앞에 점이 붙은 도메인(.example.com)을 거부해
+    // Set-Cookie 생성 시 500을 낸다. Domain=example.com 만으로도 모든 서브도메인을 커버하므로
+    // 앞쪽 점을 제거한다.
+    static String normalizeCookieDomain(String cookieDomain) {
+        if (cookieDomain == null) {
+            return "";
+        }
+        String normalized = cookieDomain.trim();
+        while (normalized.startsWith(".")) {
+            normalized = normalized.substring(1);
+        }
+        return normalized;
     }
 
     private void applyCookieScope(Cookie cookie) {
