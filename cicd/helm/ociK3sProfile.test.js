@@ -124,16 +124,12 @@ test('single-node scheduling can disable worker-only affinity', () => {
   }
 })
 
-test('public ingress keeps API root private and redirects Swagger root', () => {
+test('public ingress keeps API root private and exposes Swagger under backend context path', () => {
   const unified = readRepoFile('cicd/helm/templates/unified-ingress.yaml')
   assert.match(unified, /path:\s*\/api\/swagger-ui/)
   assert.match(unified, /path:\s*\/api\/swagger-ui\.html/)
   assert.match(unified, /path:\s*\/api\/v3\/api-docs/)
-
-  const swaggerRedirect = readRepoFile('cicd/helm/templates/swagger-redirect-ingress.yaml')
-  assert.match(swaggerRedirect, /permanent-redirect:\s*https:\/\/\{\{ \$swaggerHost \}\}\/api\/swagger-ui\/index\.html/)
-  assert.match(swaggerRedirect, /path:\s*\/\r?\n\s*pathType:\s*Exact/)
-  assert.match(swaggerRedirect, /path:\s*\/swagger-ui\r?\n\s*pathType:\s*Prefix/)
+  assert.doesNotMatch(unified, /host:\s*\{\{ \$swaggerHost \| quote \}\}[\s\S]*path:\s*\/\r?\n\s*pathType:\s*Prefix/)
 
   const apiRedirect = readRepoFile('cicd/helm/templates/api-redirect-ingress.yaml')
   assert.match(apiRedirect, /permanent-redirect:\s*https:\/\/\{\{ \$frontendHost \}\}\/login/)
