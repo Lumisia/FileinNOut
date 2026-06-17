@@ -287,6 +287,8 @@ public class ShareService {
             throw BaseException.from(BaseResponseStatus.REQUEST_ERROR);
         }
 
+        ensureWithinDriveQuota(userIdx, original.getFileSize());
+
         String newSaveName = UUID.randomUUID() + "." + original.getFileFormat();
         String newObjectKey = userIdx + "/" + newSaveName;
 
@@ -458,6 +460,45 @@ public class ShareService {
         }
 
         return parent;
+    }
+
+    private void ensureWithinDriveQuota(Long userIdx, Long additionalBytes) {
+        StoragePlanService.StorageQuota storageQuota = storagePlanService.resolveQuota(userIdx);
+        ensureWithinFreeStoredFileCount(userIdx, storageQuota);
+
+        long quotaBytes = storageQuota.totalQuotaBytes();
+        long usedBytes = resolveUsedStorageBytes(userIdx);
+        long safeAdditionalBytes = Math.max(0L, additionalBytes == null ? 0L : additionalBytes);
+
+        if (quotaBytes > 0 && usedBytes + safeAdditionalBytes > quotaBytes) {
+            throw BaseException.from(BaseResponseStatus.STORAGE_QUOTA_EXCEEDED);
+        }
+    }
+
+    private long resolveUsedStorageBytes(Long userIdx) {
+        Long usedBytes = fileUpDownloadRepository.sumStoredFileBytesByUser(userIdx, FileNodeType.FILE);
+        return Math.max(0L, usedBytes == null ? 0L : usedBytes);
+    }
+
+    private void ensureWithinFreeStoredFileCount(Long userIdx, StoragePlanService.StorageQuota storageQuota) {
+        if (storageQuota == null || !"FREE".equalsIgnoreCase(storageQuota.planCode())) {
+            return;
+        }
+
+        long maxFileCount = storageQuota.maxUploadCount();
+        if (maxFileCount <= 0) {
+            return;
+        }
+
+        long storedFileCount = resolveStoredFileCount(userIdx);
+        if (storedFileCount + 1L > maxFileCount) {
+            throw BaseException.from(BaseResponseStatus.FILE_COUNT_WRONG);
+        }
+    }
+
+    private long resolveStoredFileCount(Long userIdx) {
+        Long storedFileCount = fileUpDownloadRepository.countStoredFilesByUser(userIdx, FileNodeType.FILE);
+        return Math.max(0L, storedFileCount == null ? 0L : storedFileCount);
     }
 
     private ShareDto.ShareInfoRes toShareInfo(FileShare share) {

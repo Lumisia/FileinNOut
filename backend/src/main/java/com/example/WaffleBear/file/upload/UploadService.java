@@ -80,6 +80,8 @@ public class UploadService {
         }
 
         // 업로드할 파일을 위한 리스트 생성
+        ensureWithinStoredFileCount(userIdx, storageQuota, requests.size());
+
         List<UploadDto.ChunkRes> responses = new ArrayList<>();
         // 업로드 예정 파일들의 "용량 예약 목록"을 저장할 리스트
         List<PendingUploadReservation> pendingReservations = new ArrayList<>();
@@ -324,6 +326,31 @@ public class UploadService {
     private long resolveUsedStorageBytes(Long userIdx) {
         Long usedBytes = fileUpDownloadRepository.sumStoredFileBytesByUser(userIdx, FileNodeType.FILE);
         return Math.max(0L, usedBytes == null ? 0L : usedBytes);
+    }
+
+    private void ensureWithinStoredFileCount(
+            Long userIdx,
+            StoragePlanService.StorageQuota storageQuota,
+            long additionalFileCount
+    ) {
+        if (storageQuota == null || !"FREE".equalsIgnoreCase(storageQuota.planCode())) {
+            return;
+        }
+
+        long maxFileCount = storageQuota.maxUploadCount();
+        if (maxFileCount <= 0) {
+            return;
+        }
+
+        long storedFileCount = resolveStoredFileCount(userIdx);
+        if (storedFileCount + Math.max(0L, additionalFileCount) > maxFileCount) {
+            throw BaseException.from(BaseResponseStatus.FILE_COUNT_WRONG);
+        }
+    }
+
+    private long resolveStoredFileCount(Long userIdx) {
+        Long storedFileCount = fileUpDownloadRepository.countStoredFilesByUser(userIdx, FileNodeType.FILE);
+        return Math.max(0L, storedFileCount == null ? 0L : storedFileCount);
     }
 
     private long resolveReservedStorageBytes(Long userIdx, String ignoredReservationKey) {
