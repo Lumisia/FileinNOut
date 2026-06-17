@@ -17,6 +17,7 @@ public class MinioProperties {
 
     private String provider;
     private String endpoint;
+    private String publicEndpoint;
     private String accessKey;
     private String secretKey;
     private String bucket_cloud;
@@ -43,6 +44,10 @@ public class MinioProperties {
             return firstNonBlank(s3Endpoint, endpoint);
         }
         return endpoint;
+    }
+
+    public String getPublicEndpoint() {
+        return firstNonBlank(publicEndpoint, getEndpoint());
     }
 
     public String getAccessKey() {

@@ -5,10 +5,10 @@ import com.example.WaffleBear.common.model.BaseResponseStatus;
 import com.example.WaffleBear.config.MinioProperties;
 import com.example.WaffleBear.feater.model.Feater;
 import com.example.WaffleBear.feater.model.FeaterDto;
+import com.example.WaffleBear.file.service.MinioPresignedUrlService;
 import com.example.WaffleBear.file.service.StoragePlanService;
 import com.example.WaffleBear.user.model.User;
 import com.example.WaffleBear.user.repository.UserRepository;
-import io.minio.GetPresignedObjectUrlArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.http.Method;
@@ -44,6 +44,7 @@ public class FeaterService {
     private final FeaterRepository featerRepository;
     private final UserRepository userRepository;
     private final MinioClient minioClient;
+    private final MinioPresignedUrlService minioPresignedUrlService;
     private final MinioProperties minioProperties;
     private final StoragePlanService storagePlanService;
 
@@ -307,13 +308,11 @@ public class FeaterService {
 
         if (storedValue.startsWith(PROFILE_IMAGE_DIRECTORY + "/")) {
             try {
-                return minioClient.getPresignedObjectUrl(
-                        GetPresignedObjectUrlArgs.builder()
-                                .method(Method.GET)
-                                .bucket(minioProperties.getBucket_cloud())
-                                .object(storedValue)
-                                .expiry(minioProperties.getPresignedUrlExpirySeconds())
-                                .build()
+                return minioPresignedUrlService.getPresignedObjectUrl(
+                        Method.GET,
+                        minioProperties.getBucket_cloud(),
+                        storedValue,
+                        minioProperties.getPresignedUrlExpirySeconds()
                 );
             } catch (Exception exception) {
                 return null;

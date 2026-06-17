@@ -80,6 +80,26 @@ test('OCI k3s chart deploys MinIO for the minio storage provider', () => {
   assert.match(source, /wafflebear\.workerScheduling/)
 })
 
+test('OCI k3s MinIO uses a public HTTPS endpoint for browser presigned URLs', () => {
+  const baseValues = readRepoFile('cicd/helm/values.yaml')
+  const ociValues = readRepoFile('cicd/helm/values-oci-k3s.yaml')
+  const minioIngress = readRepoFile('cicd/helm/templates/minio-ingress.yaml')
+
+  // Backend-to-MinIO traffic stays inside the cluster, but presigned URLs must
+  // be signed with the HTTPS host that the browser can reach.
+  assert.match(baseValues, /MINIO_PUBLIC_API:/)
+  assert.match(ociValues, /MINIO_API:\s*"http:\/\/minio:9000"/)
+  assert.match(ociValues, /MINIO_PUBLIC_API:\s*"https:\/\/minio\.fileinnout\.com"/)
+  assert.match(ociValues, /hosts:[\s\S]*minio:\s*"minio\.fileinnout\.com"/)
+
+  assert.match(minioIngress, /kind:\s*Ingress/)
+  assert.match(minioIngress, /host:\s*\{\{ \.Values\.ingress\.hosts\.minio \| quote \}\}/)
+  assert.match(minioIngress, /name:\s*\{\{ \.Values\.minio\.service\.name \}\}/)
+  assert.match(minioIngress, /number:\s*\{\{ \.Values\.minio\.service\.apiPort \}\}/)
+  assert.match(minioIngress, /nginx\.ingress\.kubernetes\.io\/enable-cors:\s*"true"/)
+  assert.match(minioIngress, /nginx\.ingress\.kubernetes\.io\/cors-allow-methods:\s*"GET, PUT, HEAD, OPTIONS"/)
+})
+
 test('environment ConfigMaps render every value as a Kubernetes string', () => {
   for (const [file, valuesPath] of [
     ['cicd/helm/templates/backend-configmap.yaml', 'backend'],

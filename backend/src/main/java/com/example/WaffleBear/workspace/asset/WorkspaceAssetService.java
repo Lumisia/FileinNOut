@@ -8,6 +8,7 @@ import com.example.WaffleBear.file.FileUpDownloadRepository;
 import com.example.WaffleBear.file.dto.FileCommonDto;
 import com.example.WaffleBear.file.model.FileInfo;
 import com.example.WaffleBear.file.model.FileNodeType;
+import com.example.WaffleBear.file.service.MinioPresignedUrlService;
 import com.example.WaffleBear.file.service.StoragePlanService;
 import com.example.WaffleBear.user.model.User;
 import com.example.WaffleBear.user.repository.UserRepository;
@@ -55,6 +56,7 @@ public class WorkspaceAssetService {
     private final WorkspaceAssetRepository workspaceAssetRepository;
     private final UserPostRepository userPostRepository;
     private final MinioClient minioClient;
+    private final MinioPresignedUrlService minioPresignedUrlService;
     private final MinioProperties minioProperties;
     private final ClusteredStompPublisher stompPublisher;
     private final StoragePlanService storagePlanService;
@@ -236,13 +238,11 @@ public class WorkspaceAssetService {
 
         // ✅ 3. presigned URL + assetIdx 반환
         try {
-            String fileUrl = minioClient.getPresignedObjectUrl(
-                    GetPresignedObjectUrlArgs.builder()
-                            .method(Method.GET)
-                            .bucket(minioProperties.getBucket_cloud())
-                            .object(objectKey)
-                            .expiry(60 * 60 * 24)
-                            .build()
+            String fileUrl = minioPresignedUrlService.getPresignedObjectUrl(
+                    Method.GET,
+                    minioProperties.getBucket_cloud(),
+                    objectKey,
+                    60 * 60 * 24
             );
             return new EditorJsUploadResult(saved.getIdx(), fileUrl);
         } catch (Exception e) {
@@ -571,13 +571,11 @@ public class WorkspaceAssetService {
         }
 
         try {
-            return minioClient.getPresignedObjectUrl(
-                    GetPresignedObjectUrlArgs.builder()
-                            .method(Method.GET)
-                            .bucket(minioProperties.getBucket_cloud())
-                            .object(objectKey)
-                            .expiry(minioProperties.getPresignedUrlExpirySeconds())
-                            .build()
+            return minioPresignedUrlService.getPresignedObjectUrl(
+                    Method.GET,
+                    minioProperties.getBucket_cloud(),
+                    objectKey,
+                    minioProperties.getPresignedUrlExpirySeconds()
             );
         } catch (Exception exception) {
             throw BaseException.from(BaseResponseStatus.REQUEST_ERROR);
@@ -764,13 +762,11 @@ public class WorkspaceAssetService {
         }
 
         try {
-            return minioClient.getPresignedObjectUrl(
-                    GetPresignedObjectUrlArgs.builder()
-                            .method(Method.GET)
-                            .bucket(bucketName)
-                            .object(objectKey)
-                            .expiry(minioProperties.getPresignedUrlExpirySeconds())
-                            .build()
+            return minioPresignedUrlService.getPresignedObjectUrl(
+                    Method.GET,
+                    bucketName,
+                    objectKey,
+                    minioProperties.getPresignedUrlExpirySeconds()
             );
         } catch (Exception exception) {
             return null;
@@ -798,14 +794,12 @@ public class WorkspaceAssetService {
                             : contentType
             );
 
-            return minioClient.getPresignedObjectUrl(
-                    GetPresignedObjectUrlArgs.builder()
-                            .method(Method.GET)
-                            .bucket(minioProperties.getBucket_cloud())
-                            .object(objectKey)
-                            .expiry(minioProperties.getPresignedUrlExpirySeconds())
-                            .extraQueryParams(queryParams)
-                            .build()
+            return minioPresignedUrlService.getPresignedObjectUrl(
+                    Method.GET,
+                    minioProperties.getBucket_cloud(),
+                    objectKey,
+                    minioProperties.getPresignedUrlExpirySeconds(),
+                    queryParams
             );
         } catch (Exception exception) {
             throw BaseException.from(BaseResponseStatus.REQUEST_ERROR);
