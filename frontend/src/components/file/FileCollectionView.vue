@@ -1,4 +1,4 @@
-<script setup>
+﻿<script setup>
 import { computed, ref, watch } from "vue";
 import { useFileStore } from "@/stores/useFileStore";
 import { useViewStore } from "@/stores/viewStore";
@@ -174,7 +174,7 @@ const getFileExtension = (file) => String(file?.extension || file?.fileFormat ||
 const getUpdatedAt = (file) => file?.updatedAtLabel || formatDisplayDate(file?.updatedAt || file?.lastModified || file?.uploadDate);
 const getSharedOwnerLabel = (file) => file?.ownerName || file?.ownerEmail || "알 수 없는 사용자";
 const getSharedAtLabel = (file) => file?.sharedAtLabel || formatDisplayDate(file?.sharedAt);
-const getSharedOwnerText = (file) => `\uACF5\uC720\uC790: ${getSharedOwnerLabel(file)}`;
+const getSharedOwnerText = (file) => `공유자: ${getSharedOwnerLabel(file)}`;
 const getSharedSourceLabel = (file) => {
   const sharedAtLabel = getSharedAtLabel(file);
 
@@ -407,7 +407,7 @@ const handleDownload = async (file, event) => {
     }
     await downloadFileAsset(file);
   } catch (error) {
-    toast.error(error?.message || "\uD30C\uC77C\uC744 \uB2E4\uC6B4\uB85C\uB4DC\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.");
+    toast.error(error?.message || "파일을 다운로드하지 못했습니다.");
   } finally {
     if (fileId) {
       downloadingIds.value = downloadingIds.value.filter((id) => id !== fileId);
@@ -921,7 +921,7 @@ const onDropToParentNavigator = async (event) => {
                   :disabled="isDownloading(file)"
                   @click="handleDownload(file, $event)"
                 >
-                  {{ isDownloading(file) ? "\uC900\uBE44 \uC911..." : "\uB2E4\uC6B4\uB85C\uB4DC" }}
+                  {{ isDownloading(file) ? "준비 중..." : "다운로드" }}
                 </button>
                 <button
                   v-if="canSaveShared(file)"
@@ -1144,7 +1144,7 @@ const onDropToParentNavigator = async (event) => {
               :disabled="isDownloading(file)"
               @click="handleDownload(file, $event)"
             >
-              {{ isDownloading(file) ? "\uC900\uBE44 \uC911..." : "\uB2E4\uC6B4\uB85C\uB4DC" }}
+              {{ isDownloading(file) ? "준비 중..." : "다운로드" }}
             </button>
             <button
               v-if="canSaveShared(file)"
