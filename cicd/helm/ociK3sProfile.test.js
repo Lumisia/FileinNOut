@@ -137,6 +137,11 @@ test('MariaDB and MinIO read their shared credentials from the Secret, not the C
 
   // bootstrap Job은 DB_ID/DB_PASS로 user 비밀번호를 재설정하므로 Secret도 주입받아야 한다.
   assert.match(bootstrap, /secretRef:[\s\S]*backend-secret/)
+
+  // Secret 회전 시 StatefulSet도 재시작되도록 checksum을 건다.
+  // (없으면 backend만 롤링되고 MariaDB/MinIO는 옛 자격증명으로 남아 인증/서명 실패.)
+  assert.match(mariadb, /checksum\/backend-secret:/)
+  assert.match(minio, /checksum\/backend-secret:/)
 })
 
 test('Helm templates can render standard Deployments without Argo Rollouts', () => {
