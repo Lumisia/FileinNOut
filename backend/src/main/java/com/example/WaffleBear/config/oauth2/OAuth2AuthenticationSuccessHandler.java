@@ -27,6 +27,9 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
     @Value("${app.secure-cookie}")
     private boolean secureCookie;
 
+    @Value("${app.cookie-domain:}")
+    private String cookieDomain;
+
     @Override
     public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response, Authentication authentication)
             throws IOException, ServletException {
@@ -45,6 +48,11 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
         refreshCookie.setHttpOnly(true);
         refreshCookie.setPath("/");
         refreshCookie.setSecure(secureCookie);
+        // 프론트(lumisia.*)와 API(api.*)가 다른 서브도메인이면 상위 도메인으로 공유해야
+        // 콜백 이후 프론트에서 refresh 쿠키를 사용할 수 있다.
+        if (cookieDomain != null && !cookieDomain.isBlank()) {
+            refreshCookie.setDomain(cookieDomain);
+        }
         response.addCookie(refreshCookie);
 
         String redirectUrl = frontendUrl + "/main?accessToken=" + tokens.accessToken();
