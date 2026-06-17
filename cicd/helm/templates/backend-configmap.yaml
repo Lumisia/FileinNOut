@@ -3,4 +3,6 @@ kind: ConfigMap
 metadata:
   name: {{ include "wafflebear.fullname" . }}-backend-env
 data:
-{{- tpl (toYaml .Values.backend.env) . | nindent 2 }}
+{{- range $key, $value := .Values.backend.env }}
+  {{ $key }}: {{ tpl (toString $value) $ | quote }}
+{{- end }}

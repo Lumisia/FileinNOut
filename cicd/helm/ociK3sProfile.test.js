@@ -32,6 +32,17 @@ test('GitHub Actions deployment is manual-only because Jenkins owns main pushes'
   assert.doesNotMatch(workflow, /push:\s*\r?\n\s*branches:\s*\["main"\]/)
 })
 
+test('GitHub Actions builds multi-arch images so they run on aarch64 OCI nodes', () => {
+  const workflow = readRepoFile('.github/workflows/main.yml')
+
+  // amd64 runner + plain build = amd64-only images that fail to pull on arm64 nodes.
+  // buildx must produce a linux/amd64 + linux/arm64 manifest.
+  assert.match(workflow, /docker\/setup-qemu-action/)
+  assert.match(workflow, /docker\/setup-buildx-action/)
+  assert.match(workflow, /buildx bake/)
+  assert.match(workflow, /platform=linux\/amd64,linux\/arm64/)
+})
+
 test('OCI k3s values profile uses single-node friendly resources and domains', () => {
   const valuesPath = resolve(repoRoot, 'cicd/helm/values-oci-k3s.yaml')
   assert.equal(existsSync(valuesPath), true, 'OCI k3s values overlay should exist')
@@ -45,6 +56,40 @@ test('OCI k3s values profile uses single-node friendly resources and domains', (
   assert.match(values, /redis:[\s\S]*sentinel:[\s\S]*enabled:\s*false/)
   assert.match(values, /rollout:[\s\S]*enabled:\s*false/)
   assert.match(values, /hosts:[\s\S]*frontend:[\s\S]*api:[\s\S]*swagger:/)
+})
+
+test('OCI k3s chart deploys MinIO for the minio storage provider', () => {
+  const baseValues = readRepoFile('cicd/helm/values.yaml')
+  const ociValues = readRepoFile('cicd/helm/values-oci-k3s.yaml')
+  const minioTemplatePath = resolve(repoRoot, 'cicd/helm/templates/minio-statefulset.yaml')
+
+  assert.match(baseValues, /minio:[\s\S]*enabled:\s*true/)
+  assert.match(baseValues, /service:[\s\S]*name:\s*minio[\s\S]*apiPort:\s*9000/)
+  assert.match(ociValues, /minio:[\s\S]*storageClassName:\s*local-path/)
+  assert.match(ociValues, /minio:[\s\S]*size:\s*4Gi/)
+  assert.equal(existsSync(minioTemplatePath), true, 'MinIO StatefulSet template should exist')
+
+  const source = readFileSync(minioTemplatePath, 'utf8')
+  assert.match(source, /kind:\s*Service/)
+  assert.match(source, /kind:\s*StatefulSet/)
+  assert.match(source, /name:\s*MINIO_ROOT_USER/)
+  assert.match(source, /name:\s*MINIO_ROOT_PASSWORD/)
+  assert.match(source, /server[\s\S]*\/data[\s\S]*--console-address/)
+  assert.match(source, /httpGet:[\s\S]*\/minio\/health\/ready/)
+  assert.match(source, /minio-data/)
+  assert.match(source, /wafflebear\.workerScheduling/)
+})
+
+test('environment ConfigMaps render every value as a Kubernetes string', () => {
+  for (const [file, valuesPath] of [
+    ['cicd/helm/templates/backend-configmap.yaml', 'backend'],
+    ['cicd/helm/templates/websocket-server-configmap.yaml', 'websocket'],
+  ]) {
+    const source = readRepoFile(file)
+    assert.doesNotMatch(source, /tpl \(toYaml \.Values\.[^)]+\.env\)/)
+    assert.match(source, new RegExp(`range \\$key, \\$value := \\.Values\\.${valuesPath}\\.env`))
+    assert.match(source, /tpl \(toString \$value\) \$ \| quote/)
+  }
 })
 
 test('Helm templates can render standard Deployments without Argo Rollouts', () => {
@@ -77,4 +122,21 @@ test('single-node scheduling can disable worker-only affinity', () => {
     assert.match(source, /"root"\s+\./)
     assert.match(source, /"labels"\s+\(dict/)
   }
+})
+
+test('app Dockerfiles use ARM64-capable base images for OCI aarch64 nodes', () => {
+  // OCI Ampere A1 nodes are aarch64. eclipse-temurin alpine tags are not published
+  // for arm64 ("no match for platform in manifest"), so the backend image must use a
+  // multi-arch (jammy) Temurin base instead.
+  const backend = readRepoFile('cicd/backend.dockerfile')
+  assert.doesNotMatch(backend, /eclipse-temurin:[^\s]*-alpine/)
+  assert.match(backend, /FROM eclipse-temurin:17-jdk-jammy AS builder/)
+  assert.match(backend, /FROM eclipse-temurin:17-jre-jammy/)
+
+  // node and nginx alpine images are multi-arch (they include arm64), so they are fine.
+  const websocket = readRepoFile('cicd/websocket.dockerfile')
+  assert.match(websocket, /FROM node:/)
+  const frontend = readRepoFile('cicd/frontend.dockerfile')
+  assert.match(frontend, /FROM node:/)
+  assert.match(frontend, /FROM nginx:/)
 })

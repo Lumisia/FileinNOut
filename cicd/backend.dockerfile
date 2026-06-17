@@ -1,5 +1,5 @@
 # --- 1단계: 빌드 ---
-FROM eclipse-temurin:17-jdk-alpine AS builder
+FROM eclipse-temurin:17-jdk-jammy AS builder
 WORKDIR /app/backend
 COPY backend/gradlew .
 COPY backend/gradle gradle
@@ -10,9 +10,11 @@ COPY backend/src ./src
 RUN ./gradlew bootJar --no-daemon -x test
 
 # --- 2단계: 실행 ---
-FROM eclipse-temurin:17-jre-alpine
+FROM eclipse-temurin:17-jre-jammy
 WORKDIR /app
-RUN apk add --no-cache curl
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /app/backend/build/libs/*.jar app.jar
 
 EXPOSE 8080
