@@ -49,9 +49,10 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
         refreshCookie.setPath("/");
         refreshCookie.setSecure(secureCookie);
         // 프론트(lumisia.*)와 API(api.*)가 다른 서브도메인이면 상위 도메인으로 공유해야
-        // 콜백 이후 프론트에서 refresh 쿠키를 사용할 수 있다.
-        if (cookieDomain != null && !cookieDomain.isBlank()) {
-            refreshCookie.setDomain(cookieDomain);
+        // 콜백 이후 프론트에서 refresh 쿠키를 사용할 수 있다. (앞 점은 Tomcat이 거부하므로 제거)
+        String normalizedDomain = OAuth2AuthorizationRequestRepository.normalizeCookieDomain(cookieDomain);
+        if (!normalizedDomain.isEmpty()) {
+            refreshCookie.setDomain(normalizedDomain);
         }
         response.addCookie(refreshCookie);
 
