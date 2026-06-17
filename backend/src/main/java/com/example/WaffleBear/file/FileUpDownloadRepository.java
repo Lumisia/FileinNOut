@@ -38,6 +38,17 @@ public interface FileUpDownloadRepository extends JpaRepository<FileInfo, Long>,
     );
 
     @Query("""
+            select count(f)
+            from FileInfo f
+            where f.user.idx = :userIdx
+              and (f.nodeType is null or f.nodeType = :fileNodeType)
+            """)
+    Long countStoredFilesByUser(
+            @Param("userIdx") Long userIdx,
+            @Param("fileNodeType") FileNodeType fileNodeType
+    );
+
+    @Query("""
             select
                 f.user.idx as userIdx,
                 sum(case when f.nodeType = :folderType then 0 else 1 end) as fileCount,

@@ -26,15 +26,16 @@ public class StoragePlanService {
 
     public static final long GIGABYTE = 1024L * 1024 * 1024;
     public static final long TERABYTE = 1024L * GIGABYTE;
-    public static final long FREE_STORAGE_BYTES = 20L * GIGABYTE;
+    public static final long FREE_STORAGE_BYTES = 100L * 1024 * 1024;
     public static final long PLUS_STORAGE_BYTES = 500L * GIGABYTE;
     public static final long PREMIUM_STORAGE_BYTES = 1L * TERABYTE;
     public static final long ADMIN_STORAGE_BYTES = 10L * TERABYTE;
 
+    private static final long FREE_MAX_UPLOAD_FILE_BYTES = FREE_STORAGE_BYTES;
     private static final long STANDARD_MAX_UPLOAD_FILE_BYTES = 5L * GIGABYTE;
     private static final long PREMIUM_MAX_UPLOAD_FILE_BYTES = 20L * GIGABYTE;
     private static final long ADMIN_MAX_UPLOAD_FILE_BYTES = 20L * GIGABYTE;
-    private static final int FREE_MAX_UPLOAD_COUNT = 30;
+    private static final int FREE_MAX_UPLOAD_COUNT = 1;
     private static final int STANDARD_MAX_UPLOAD_COUNT = 100;
     private static final int PREMIUM_MAX_UPLOAD_COUNT = 300;
     private static final int ADMIN_MAX_UPLOAD_COUNT = 500;
@@ -47,7 +48,7 @@ public class StoragePlanService {
     private static final Map<String, ProductDefinition> PRODUCT_DEFINITIONS = Map.ofEntries(
             Map.entry("FREE", new ProductDefinition(
                     "FREE",
-                    "기본 20GB",
+                    "기본 100MB",
                     "기본 멤버십",
                     CATEGORY_MEMBERSHIP,
                     FREE_STORAGE_BYTES,
@@ -55,7 +56,7 @@ public class StoragePlanService {
                     0,
                     false,
                     false,
-                    STANDARD_MAX_UPLOAD_FILE_BYTES,
+                    FREE_MAX_UPLOAD_FILE_BYTES,
                     FREE_MAX_UPLOAD_COUNT
             )),
             Map.entry("PLUS", new ProductDefinition(
