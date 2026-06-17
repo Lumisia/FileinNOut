@@ -68,6 +68,47 @@ test('public portfolio ingress persists FileInNOut Kiali and Jaeger hosts', () =
   assert.doesNotMatch(ingress, /ssl-redirect/)
 })
 
+test('public portfolio ingress also exposes Grafana, Prometheus, and the Dashboard', () => {
+  const ingress = readRepoFile('cicd/observability/ingress.yaml')
+  assert.match(ingress, /host:\s*grafana\.fileinnout\.com/)
+  assert.match(ingress, /host:\s*prometheus\.fileinnout\.com/)
+  assert.match(ingress, /host:\s*dashboard\.fileinnout\.com/)
+  assert.match(ingress, /name:\s*grafana/)
+  assert.match(ingress, /name:\s*prometheus-server/)
+  assert.match(ingress, /name:\s*kubernetes-dashboard/)
+  // Dashboard serves HTTPS on its service port, so nginx must speak HTTPS upstream.
+  assert.match(ingress, /backend-protocol:\s*"?HTTPS"?/)
+})
+
+test('Grafana values stay light and serve anonymous read-only over Prometheus', () => {
+  assert.equal(fileExists('cicd/observability/values-grafana-k3s.yaml'), true)
+
+  const values = readRepoFile('cicd/observability/values-grafana-k3s.yaml')
+  // 익명 방문자는 Viewer(읽기 전용)
+  assert.match(values, /auth\.anonymous:[\s\S]*enabled:\s*true/)
+  assert.match(values, /org_role:\s*Viewer/)
+  assert.match(values, /allow_sign_up:\s*false/)
+  // 기존 Prometheus/Jaeger 데이터소스 재사용
+  assert.match(values, /url:\s*http:\/\/prometheus-server\.observability\.svc\.cluster\.local/)
+  assert.match(values, /url:\s*http:\/\/jaeger-query\.observability\.svc\.cluster\.local:16686/)
+  // 작은 자원 + local-path 퍼시스턴스
+  assert.match(values, /requests:[\s\S]*cpu:\s*"100m"[\s\S]*memory:\s*"128Mi"/)
+  assert.match(values, /storageClassName:\s*"local-path"/)
+  // 평문 admin 비밀번호 금지
+  assert.doesNotMatch(values, /adminPassword:/)
+})
+
+test('Kubernetes Dashboard RBAC grants read-only view without secrets', () => {
+  assert.equal(fileExists('cicd/observability/dashboard-readonly-rbac.yaml'), true)
+
+  const rbac = readRepoFile('cicd/observability/dashboard-readonly-rbac.yaml')
+  assert.match(rbac, /kind:\s*ServiceAccount[\s\S]*name:\s*dashboard-viewer/)
+  assert.match(rbac, /kind:\s*ClusterRoleBinding/)
+  // 내장 view 롤(Secret 제외)에 바인딩
+  assert.match(rbac, /kind:\s*ClusterRole\s*\n\s*name:\s*view/)
+  assert.doesNotMatch(rbac, /name:\s*cluster-admin/)
+})
+
 test('Istio telemetry manifest and docs wire traces to Jaeger without sidecar mode', () => {
   assert.equal(fileExists('cicd/observability/istio-telemetry.yaml'), true)
   assert.equal(fileExists('cicd/observability/README.md'), true)
@@ -83,7 +124,7 @@ test('Istio telemetry manifest and docs wire traces to Jaeger without sidecar mo
   assert.match(readme, /values\.cni\.cniConfDir=\/var\/lib\/rancher\/k3s\/agent\/etc\/cni\/net\.d/)
   assert.match(readme, /extensionProviders\[0\]\.opentelemetry\.service=jaeger-collector\.observability\.svc\.cluster\.local/)
   assert.match(readme, /kubectl label namespace fileinnout istio\.io\/dataplane-mode=ambient --overwrite/)
-  assert.match(readme, /Kiali and Jaeger are intentionally public/)
+  assert.match(readme, /intentionally public for this portfolio deployment/)
 })
 
 test('visitor access docs keep Jenkins private and observability UIs read-only', () => {
@@ -108,4 +149,11 @@ test('visitor access docs keep Jenkins private and observability UIs read-only',
   assert.match(combined, /do not expose[\s\S]*jaeger-collector/)
   assert.match(readme, /kiali\.fileinnout\.com/)
   assert.match(readme, /jaeger\.fileinnout\.com/)
+  // Grafana / Prometheus / Dashboard visitor read-only docs
+  assert.match(readme, /grafana\.fileinnout\.com/)
+  assert.match(readme, /prometheus\.fileinnout\.com/)
+  assert.match(readme, /dashboard\.fileinnout\.com/)
+  assert.match(readme, /anonymous[\s\S]*Viewer/)
+  assert.match(readme, /Prometheus[\s\S]*no user\/role model/)
+  assert.match(readme, /view.*ClusterRole|ClusterRole[\s\S]*view/)
 })
