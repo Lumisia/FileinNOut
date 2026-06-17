@@ -11,17 +11,18 @@ metrics, topology, and tracing while keeping the node stable.
 | Component | Purpose | Exposure |
 |---|---|---|
 | Istio ambient | Mesh traffic capture without per-pod sidecars | internal |
-| Prometheus | Metrics backend for Kiali, Grafana, and Istio metrics | public read-only UI |
-| Grafana | Dashboards over Prometheus/Jaeger | public read-only (anonymous Viewer) |
+| Prometheus | Metrics backend for Kiali, Grafana, and Istio metrics | public status/query UI |
+| Grafana | Dashboards over Prometheus/Jaeger | admin-login dashboard curation |
 | Kiali | Mesh graph and service health UI | public read-only domain |
 | Jaeger all-in-one | Request tracing demo | public query UI |
 | Kubernetes Dashboard | Cluster/workload viewer | public read-only (view RBAC) |
 
-Kiali, Jaeger, Grafana, Prometheus, and the Kubernetes Dashboard are
-intentionally public for this portfolio deployment, but every one of them is
-read-only: Kiali uses `deployment.view_only_mode: true`, Grafana serves
-anonymous `Viewer`, Prometheus exposes only its read-only query UI, and the
-Kubernetes Dashboard is bound to the built-in `view` ClusterRole. Jenkins must
+Kiali, Jaeger, Prometheus, and the Kubernetes Dashboard are intentionally
+public for this portfolio deployment. Kiali uses
+`deployment.view_only_mode: true`, Prometheus exposes status/query pages with
+admin and lifecycle APIs disabled by default, and the Kubernetes Dashboard is
+bound to the built-in `view` ClusterRole. Grafana requires the generated admin
+login so the operator can curate dashboards before showing them. Jenkins must
 remain private and must not be directly public.
 
 ## Install Order
@@ -139,9 +140,9 @@ helm upgrade --install grafana grafana/grafana \
   -f cicd/observability/values-grafana-k3s.yaml
 ```
 
-Grafana reuses the running Prometheus, so it adds no scrape load. Visitors land
-as anonymous `Viewer` (read-only). The admin password is generated into a
-Secret:
+Grafana reuses the running Prometheus, so it adds no scrape load. Anonymous
+access is disabled; use the generated `admin` account to create and curate
+portfolio dashboards. The admin password is generated into a Secret:
 
 ```bash
 kubectl -n observability get secret grafana -o jsonpath="{.data.admin-password}" | base64 -d
@@ -154,11 +155,15 @@ kubectl apply -f cicd/observability/dashboard-readonly-rbac.yaml
 ```
 
 The Dashboard is bound to the built-in `view` ClusterRole, which excludes
-Secrets. Either hand visitors a short-lived token
-(`kubectl -n kubernetes-dashboard create token dashboard-viewer`) or enable
-`--enable-skip-login` for fully anonymous read-only access. Keep sensitive
-values in k8s Secrets, never in ConfigMaps, because ConfigMaps are visible to
-`view`.
+Secrets. `dashboard-readonly-rbac.yaml` also creates the long-lived
+`dashboard-viewer-token` Secret for portfolio visitors:
+
+```bash
+kubectl -n kubernetes-dashboard get secret dashboard-viewer-token -o jsonpath="{.data.token}" | base64 -d
+```
+
+Keep sensitive values in k8s Secrets, never in ConfigMaps, because ConfigMaps
+are visible to `view`.
 
 ## Cloudflare Domain Plan
 
@@ -172,8 +177,8 @@ Common portfolio domains:
 | `jenkins.fileinnout.com` | Jenkins UI, private/protected only |
 | `kiali.fileinnout.com` | public Kiali read-only UI |
 | `jaeger.fileinnout.com` | public Jaeger query UI |
-| `grafana.fileinnout.com` | public Grafana read-only dashboards |
-| `prometheus.fileinnout.com` | public Prometheus read-only query UI |
+| `grafana.fileinnout.com` | Grafana login for dashboard curation |
+| `prometheus.fileinnout.com` | public Prometheus target/status UI |
 | `dashboard.fileinnout.com` | public Kubernetes Dashboard, read-only |
 
 Protect `jenkins` with Cloudflare Access, SSH tunneling, or another explicit
@@ -209,30 +214,23 @@ is limited to the `jaeger-query` UI; do not expose the internal
 `jaeger-collector` service or OTLP ports publicly. The current ingress points
 to `jaeger-query` only.
 
-For Grafana, visitors use the native anonymous account:
-
-```yaml
-grafana.ini:
-  auth.anonymous:
-    enabled: true
-    org_role: Viewer
-```
-
-Anonymous `Viewer` can read dashboards but cannot edit, save, or administer.
-The admin login form stays available for the operator only, and its password
+For Grafana, anonymous access is disabled. Use the generated `admin` account to
+build dashboards, snapshots, or screenshots for the portfolio. The password
 lives in the generated `grafana` Secret (never in this repo).
 
 For Prometheus, there is no user/role model. The UI is read-only by default
 (admin API and lifecycle endpoints stay disabled), so "visitor account" does
-not apply; the only control is who can reach the host. Limit reach with
+not apply; the only control is who can reach the host. The public ingress sends
+the bare host to `/targets`, which is more useful for a portfolio than a blank
+query page because it shows scrape health immediately. Limit reach with
 Cloudflare Access if needed, and remember the query UI exposes internal target
 addresses, service names, and label cardinality.
 
 For the Kubernetes Dashboard, the visitor identity is a read-only
 ServiceAccount bound to the built-in `view` ClusterRole (excludes Secrets) via
-`dashboard-readonly-rbac.yaml`. Either issue a short-lived token for that SA or
-enable `--enable-skip-login` for anonymous read-only viewing. Keep secrets in
-k8s Secrets, not ConfigMaps, since `view` can read ConfigMaps.
+`dashboard-readonly-rbac.yaml`. The long-lived token is stored in the
+`dashboard-viewer-token` Secret for portfolio publishing. Keep secrets in k8s
+Secrets, not ConfigMaps, since `view` can read ConfigMaps.
 
 ## Resource Budget
 
