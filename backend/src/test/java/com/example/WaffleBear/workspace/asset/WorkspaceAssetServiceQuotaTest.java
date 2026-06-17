@@ -6,6 +6,7 @@ import com.example.WaffleBear.config.MinioProperties;
 import com.example.WaffleBear.config.stomp.ClusteredStompPublisher;
 import com.example.WaffleBear.file.FileUpDownloadRepository;
 import com.example.WaffleBear.file.model.FileNodeType;
+import com.example.WaffleBear.file.service.MinioPresignedUrlService;
 import com.example.WaffleBear.file.service.StoragePlanService;
 import com.example.WaffleBear.user.repository.UserRepository;
 import com.example.WaffleBear.workspace.asset.model.WorkspaceAsset;
@@ -36,6 +37,7 @@ class WorkspaceAssetServiceQuotaTest {
     @Mock WorkspaceAssetRepository workspaceAssetRepository;
     @Mock UserPostRepository userPostRepository;
     @Mock MinioClient minioClient;
+    @Mock MinioPresignedUrlService minioPresignedUrlService;
     @Mock MinioProperties minioProperties;
     @Mock ClusteredStompPublisher stompPublisher;
     @Mock StoragePlanService storagePlanService;
@@ -78,6 +80,7 @@ class WorkspaceAssetServiceQuotaTest {
                 workspaceAssetRepository,
                 userPostRepository,
                 minioClient,
+                minioPresignedUrlService,
                 minioProperties,
                 stompPublisher,
                 storagePlanService
@@ -127,6 +130,7 @@ class WorkspaceAssetServiceQuotaTest {
                 workspaceAssetRepository,
                 userPostRepository,
                 minioClient,
+                minioPresignedUrlService,
                 minioProperties,
                 stompPublisher,
                 storagePlanService

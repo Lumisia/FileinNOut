@@ -9,12 +9,12 @@ import com.example.WaffleBear.config.MinioProperties;
 import com.example.WaffleBear.file.FileUpDownloadRepository;
 import com.example.WaffleBear.file.model.FileInfo;
 import com.example.WaffleBear.file.model.FileNodeType;
+import com.example.WaffleBear.file.service.MinioPresignedUrlService;
 import com.example.WaffleBear.file.service.StoragePlanService;
 import com.example.WaffleBear.file.upload.dto.UploadDto;
 import com.example.WaffleBear.user.model.User;
 import io.minio.ComposeObjectArgs;
 import io.minio.ComposeSource;
-import io.minio.GetPresignedObjectUrlArgs;
 import io.minio.MinioClient;
 import io.minio.RemoveObjectsArgs;
 import io.minio.Result;
@@ -43,6 +43,7 @@ public class UploadService {
     private static final long RESERVATION_GRACE_SECONDS = 5L * 60L;
     private final FileUpDownloadRepository fileUpDownloadRepository;
     private final MinioClient minioClient;
+    private final MinioPresignedUrlService minioPresignedUrlService;
     private final MinioProperties minioProperties;
     private final StoragePlanService storagePlanService;
     private final UploadFolderService uploadFolderService;
@@ -526,13 +527,11 @@ public class UploadService {
 
     private String generatePresignedUploadUrl(String objectKey) {
         try {
-            return minioClient.getPresignedObjectUrl(
-                    GetPresignedObjectUrlArgs.builder()
-                            .method(Method.PUT)
-                            .bucket(minioProperties.getBucket_cloud())
-                            .object(objectKey)
-                            .expiry(minioProperties.getPresignedUrlExpirySeconds())
-                            .build()
+            return minioPresignedUrlService.getPresignedObjectUrl(
+                    Method.PUT,
+                    minioProperties.getBucket_cloud(),
+                    objectKey,
+                    minioProperties.getPresignedUrlExpirySeconds()
             );
         } catch (Exception e) {
             throw BaseException.from(BaseResponseStatus.FILE_UPLOADURL_FAIL);

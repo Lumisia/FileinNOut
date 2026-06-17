@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j; // 로그 기록을 위해 추가
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.util.StringUtils;
 
 @Slf4j
@@ -16,6 +17,7 @@ public class MinioConfig {
     private final MinioProperties minioProperties;
 
     @Bean
+    @Primary
     public MinioClient minioClient() {
         // 1. MinioClient 빌드
         MinioClient.Builder builder = MinioClient.builder()
@@ -35,6 +37,19 @@ public class MinioConfig {
     }
 
     // MinioConfig.java 내의 initBucket 부분 수정
+    @Bean("publicMinioClient")
+    public MinioClient publicMinioClient() {
+        MinioClient.Builder builder = MinioClient.builder()
+                .endpoint(minioProperties.getPublicEndpoint())
+                .credentials(minioProperties.getAccessKey(), minioProperties.getSecretKey());
+
+        if (StringUtils.hasText(minioProperties.getRegion())) {
+            builder.region(minioProperties.getRegion());
+        }
+
+        return builder.build();
+    }
+
     private void initBucket(MinioClient minioClient) {
         // 기존 메서드 명칭에 맞춰 호출
         String[] buckets = { minioProperties.getBucket_cloud(), minioProperties.getBucket_work() };
