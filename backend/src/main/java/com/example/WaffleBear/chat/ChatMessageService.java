@@ -12,11 +12,11 @@ import com.example.WaffleBear.feater.FeaterService;
 import com.example.WaffleBear.file.FileUpDownloadRepository;
 import com.example.WaffleBear.file.model.FileInfo;
 import com.example.WaffleBear.file.model.FileNodeType;
+import com.example.WaffleBear.file.service.MinioPresignedUrlService;
 import com.example.WaffleBear.file.share.ShareRepository;
 import com.example.WaffleBear.notification.NotificationService;
 import com.example.WaffleBear.user.model.User;
 import com.example.WaffleBear.user.repository.UserRepository;
-import io.minio.GetPresignedObjectUrlArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.http.Method;
@@ -48,6 +48,7 @@ public class ChatMessageService {
     private final ClusteredStompPublisher stompPublisher;
     private final FeaterService featerService;
     private final MinioClient minioClient;
+    private final MinioPresignedUrlService minioPresignedUrlService;
     private final MinioProperties minioProperties;
     private final FileUpDownloadRepository fileRepository;
     private final ShareRepository shareRepository;
@@ -236,13 +237,11 @@ public class ChatMessageService {
                             .build()
             );
 
-            return minioClient.getPresignedObjectUrl(
-                    GetPresignedObjectUrlArgs.builder()
-                            .method(Method.GET)
-                            .bucket(minioProperties.getBucket_cloud())
-                            .object(objectKey)
-                            .expiry(60 * 60 * 24)
-                            .build()
+            return minioPresignedUrlService.getPresignedObjectUrl(
+                    Method.GET,
+                    minioProperties.getBucket_cloud(),
+                    objectKey,
+                    60 * 60 * 24
             );
         } catch (Exception e) {
             throw new RuntimeException("파일 업로드 실패: " + e.getMessage());
@@ -359,13 +358,11 @@ public class ChatMessageService {
             throw new RuntimeException("파일이 아닙니다.");
         }
         try {
-            return minioClient.getPresignedObjectUrl(
-                    GetPresignedObjectUrlArgs.builder()
-                            .method(Method.GET)
-                            .bucket(minioProperties.getBucket_cloud())
-                            .object(fileInfo.getFileSavePath())
-                            .expiry(Math.min(minioProperties.getPresignedUrlExpirySeconds(), 300))
-                            .build()
+            return minioPresignedUrlService.getPresignedObjectUrl(
+                    Method.GET,
+                    minioProperties.getBucket_cloud(),
+                    fileInfo.getFileSavePath(),
+                    Math.min(minioProperties.getPresignedUrlExpirySeconds(), 300)
             );
         } catch (Exception e) {
             throw new RuntimeException("다운로드 URL 생성 실패: " + e.getMessage());

@@ -13,7 +13,6 @@ import com.example.WaffleBear.file.model.FileNodeType;
 import com.example.WaffleBear.file.share.ShareRepository;
 import com.example.WaffleBear.user.model.User;
 import io.minio.GetObjectArgs;
-import io.minio.GetPresignedObjectUrlArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.RemoveObjectsArgs;
@@ -61,6 +60,7 @@ public class FileUpDownloadMinioService implements FileUpDownloadService {
 
     private final FileUpDownloadRepository fileUpDownloadRepository;
     private final MinioClient minioClient;
+    private final MinioPresignedUrlService minioPresignedUrlService;
     private final MinioProperties minioProperties;
     private final VideoThumbnailService videoThumbnailService;
     private final StoragePlanService storagePlanService;
@@ -849,12 +849,12 @@ public class FileUpDownloadMinioService implements FileUpDownloadService {
         }
 
         try {
-            return minioClient.getPresignedObjectUrl(GetPresignedObjectUrlArgs.builder()
-                    .method(Method.GET)
-                    .bucket(minioProperties.getBucket_cloud())
-                    .object(objectKey)
-                    .expiry(minioProperties.getPresignedUrlExpirySeconds())
-                    .build());
+            return minioPresignedUrlService.getPresignedObjectUrl(
+                    Method.GET,
+                    minioProperties.getBucket_cloud(),
+                    objectKey,
+                    minioProperties.getPresignedUrlExpirySeconds()
+            );
         } catch (Exception e) {
             return null;
         }
@@ -879,13 +879,13 @@ public class FileUpDownloadMinioService implements FileUpDownloadService {
                 queryParams.put("response-content-type", contentType);
             }
 
-            return minioClient.getPresignedObjectUrl(GetPresignedObjectUrlArgs.builder()
-                    .method(Method.GET)
-                    .bucket(minioProperties.getBucket_cloud())
-                    .object(objectKey)
-                    .expiry(minioProperties.getPresignedUrlExpirySeconds())
-                    .extraQueryParams(queryParams)
-                    .build());
+            return minioPresignedUrlService.getPresignedObjectUrl(
+                    Method.GET,
+                    minioProperties.getBucket_cloud(),
+                    objectKey,
+                    minioProperties.getPresignedUrlExpirySeconds(),
+                    queryParams
+            );
         } catch (Exception exception) {
             throw BaseException.from(BaseResponseStatus.REQUEST_ERROR);
         }
@@ -1006,12 +1006,12 @@ public class FileUpDownloadMinioService implements FileUpDownloadService {
         }
 
         try {
-            return minioClient.getPresignedObjectUrl(GetPresignedObjectUrlArgs.builder()
-                    .method(Method.GET)
-                    .bucket(minioProperties.getBucket_cloud())
-                    .object(objectKey)
-                    .expiry(minioProperties.getPresignedUrlExpirySeconds())
-                    .build());
+            return minioPresignedUrlService.getPresignedObjectUrl(
+                    Method.GET,
+                    minioProperties.getBucket_cloud(),
+                    objectKey,
+                    minioProperties.getPresignedUrlExpirySeconds()
+            );
         } catch (Exception ignored) {
             return null;
         }

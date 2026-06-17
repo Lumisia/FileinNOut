@@ -70,6 +70,7 @@ backend:
     DB_PASS: ''
     STORAGE_PROVIDER: 'minio'
     MINIO_API: 'https://www.minio.calenledger.kro.kr/'
+    MINIO_PUBLIC_API: 'https://www.minio.calenledger.kro.kr'
     MINIO_NAME: ''
     MINIO_SECRET: ''
     MINIO_CLOUD_BUCKET: 'fileinnout'
@@ -277,6 +278,7 @@ ingress:
     backend: "api.fileinnoutcloud.kro.kr"
     api: "api.fileinnoutcloud.kro.kr"
     swagger: ""
+    minio: ""
     
   tls:
     enabled: true

@@ -6,6 +6,7 @@ import com.example.WaffleBear.common.model.BaseResponseStatus;
 import com.example.WaffleBear.config.MinioProperties;
 import com.example.WaffleBear.file.FileUpDownloadRepository;
 import com.example.WaffleBear.file.model.FileNodeType;
+import com.example.WaffleBear.file.service.MinioPresignedUrlService;
 import com.example.WaffleBear.file.service.StoragePlanService;
 import com.example.WaffleBear.file.upload.dto.UploadDto;
 import io.minio.MinioClient;
@@ -27,6 +28,7 @@ class UploadServiceQuotaTest {
 
     @Mock FileUpDownloadRepository fileUpDownloadRepository;
     @Mock MinioClient minioClient;
+    @Mock MinioPresignedUrlService minioPresignedUrlService;
     @Mock MinioProperties minioProperties;
     @Mock StoragePlanService storagePlanService;
     @Mock UploadFolderService uploadFolderService;
@@ -44,6 +46,7 @@ class UploadServiceQuotaTest {
         UploadService service = new UploadService(
                 fileUpDownloadRepository,
                 minioClient,
+                minioPresignedUrlService,
                 minioProperties,
                 storagePlanService,
                 uploadFolderService,

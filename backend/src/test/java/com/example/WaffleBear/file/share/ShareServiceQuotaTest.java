@@ -6,6 +6,7 @@ import com.example.WaffleBear.config.MinioProperties;
 import com.example.WaffleBear.file.FileUpDownloadRepository;
 import com.example.WaffleBear.file.model.FileInfo;
 import com.example.WaffleBear.file.model.FileNodeType;
+import com.example.WaffleBear.file.service.MinioPresignedUrlService;
 import com.example.WaffleBear.file.service.StoragePlanService;
 import com.example.WaffleBear.file.share.model.FileShare;
 import com.example.WaffleBear.notification.NotificationService;
@@ -31,6 +32,7 @@ class ShareServiceQuotaTest {
     @Mock ShareRepository shareRepository;
     @Mock UserRepository userRepository;
     @Mock MinioClient minioClient;
+    @Mock MinioPresignedUrlService minioPresignedUrlService;
     @Mock MinioProperties minioProperties;
     @Mock StoragePlanService storagePlanService;
     @Mock NotificationService notificationService;
@@ -68,6 +70,7 @@ class ShareServiceQuotaTest {
                 shareRepository,
                 userRepository,
                 minioClient,
+                minioPresignedUrlService,
                 minioProperties,
                 storagePlanService,
                 notificationService
@@ -112,6 +115,7 @@ class ShareServiceQuotaTest {
                 shareRepository,
                 userRepository,
                 minioClient,
+                minioPresignedUrlService,
                 minioProperties,
                 storagePlanService,
                 notificationService

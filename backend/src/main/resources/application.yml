@@ -111,6 +111,7 @@ spring:
 minio:
   provider: ${STORAGE_PROVIDER:minio}
   endpoint: ${MINIO_API}
+  public-endpoint: ${MINIO_PUBLIC_API:${MINIO_API}}
   access-key: ${MINIO_NAME}
   secret-key: ${MINIO_SECRET}
   bucket_cloud: ${MINIO_CLOUD_BUCKET}
