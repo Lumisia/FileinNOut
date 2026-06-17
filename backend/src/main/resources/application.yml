@@ -30,6 +30,9 @@ app:
   frontend-url: ${APP_FRONTEND_URL:http://localhost}
   backend-url: ${APP_BACKEND_URL:http://localhost/api}
   secure-cookie: ${APP_SECURE_COOKIE:false}
+  # 프론트(lumisia.*)와 API(api.*)가 다른 서브도메인일 때 OAuth/refresh 쿠키를
+  # 공유하려면 상위 도메인(예: .fileinnout.com)을 지정한다. 비우면 호스트 전용(localhost).
+  cookie-domain: ${APP_COOKIE_DOMAIN:}
 
 spring:
   data:
