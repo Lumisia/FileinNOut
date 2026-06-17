@@ -53,16 +53,15 @@ The k3s ingress decides how to route `app`, `api`, `swagger`, `kiali`, and
 
 ## Access Policies
 
-Create Cloudflare Access self-hosted applications for these admin surfaces:
+Create a Cloudflare Access self-hosted application for Jenkins:
 
 - `jenkins.example.com`
-- `kiali.example.com`
-- `jaeger.example.com`
 
 For a portfolio visitor, create an Allow policy with the visitor email address
-or a small list of visitor email addresses. Keep `app`, `api`, and `swagger`
-public unless you intentionally want to hide the whole portfolio.
+or a small list of visitor email addresses. Keep `app`, `api`, `swagger`,
+`kiali`, and `jaeger` public unless you intentionally want to hide the whole
+portfolio.
 
-Cloudflare Access is only the first gate. Jenkins still needs Matrix
-Authorization, Kiali still needs `view_only_mode: true`, and Jaeger should only
-expose the query UI.
+Cloudflare Access is only the first gate for Jenkins. Jenkins still needs
+Matrix Authorization. Kiali still needs `view_only_mode: true`, and Jaeger
+should only expose the query UI.

@@ -12,11 +12,13 @@ metrics, topology, and tracing while keeping the node stable.
 |---|---|---|
 | Istio ambient | Mesh traffic capture without per-pod sidecars | internal |
 | Prometheus | Metrics backend for Kiali and Istio metrics | internal |
-| Kiali | Mesh graph and service health UI | protected domain |
-| Jaeger all-in-one | Request tracing demo | protected domain |
+| Kiali | Mesh graph and service health UI | public read-only domain |
+| Jaeger all-in-one | Request tracing demo | public query UI |
 
-Do not expose Kiali or Jaeger publicly without Cloudflare Access. They are
-operator/admin surfaces, not public product pages.
+Kiali and Jaeger are intentionally public for this portfolio deployment.
+Kiali stays read-only through `deployment.view_only_mode: true`, and Jaeger
+exposes only the query UI. Jenkins must remain private and must not be directly
+public.
 
 ## Install Order
 
@@ -94,10 +96,10 @@ kubectl rollout restart deployment -n fileinnout
 
 ### 7. Expose Kiali and Jaeger after Cloudflare DNS is ready
 
-Replace placeholder hosts first:
+This manifest contains the current FileInNOut portfolio hosts:
 
-- `kiali.example.com`
-- `jaeger.example.com`
+- `kiali.fileinnout.com`
+- `jaeger.fileinnout.com`
 
 Then apply:
 
@@ -105,32 +107,41 @@ Then apply:
 kubectl apply -f cicd/observability/ingress.yaml
 ```
 
+Kiali serves under `web_root: /kiali`, so the Kiali ingress carries
+`nginx.ingress.kubernetes.io/app-root: /kiali`. That redirects the bare host
+(`https://kiali.<domain>/`) to the Kiali app instead of returning 404. Jaeger
+`jaeger-query` serves at root, so no rewrite is needed.
+
+These two ingress objects were first applied manually on the cluster. They now
+live in this manifest, so a cluster rebuild can restore them with the command
+above. Public access is intentional, but keep traces and demo traffic free of
+tokens, passwords, private file names, or personal data.
+
 ## Cloudflare Domain Plan
 
 Common portfolio domains:
 
 | Domain | Use |
 |---|---|
-| `app.your-domain` | public frontend |
-| `api.your-domain` | backend API |
-| `swagger.your-domain` | Swagger UI |
-| `jenkins.your-domain` | Jenkins UI, protected |
-| `kiali.your-domain` | Kiali UI, protected |
-| `jaeger.your-domain` | Jaeger UI, protected |
+| `lumisia.fileinnout.com` | public frontend |
+| `api.fileinnout.com` | backend API |
+| `swagger.fileinnout.com` | Swagger UI |
+| `jenkins.fileinnout.com` | Jenkins UI, private/protected only |
+| `kiali.fileinnout.com` | public Kiali read-only UI |
+| `jaeger.fileinnout.com` | public Jaeger query UI |
 
-Protect `jenkins`, `kiali`, and `jaeger` with Cloudflare Access or another
-authentication layer.
+Protect `jenkins` with Cloudflare Access, SSH tunneling, or another explicit
+authentication layer. Kiali and Jaeger are public by design for the portfolio,
+so keep them read-only and keep sensitive data out of traces.
 
 ## Visitor Read-only Access
 
-Use Cloudflare Access as the first gate for portfolio visitors:
+Use Cloudflare Access as the first gate for Jenkins visitors:
 
-1. Create self-hosted applications for `jenkins.your-domain`,
-   `kiali.your-domain`, and `jaeger.your-domain`.
+1. Create a self-hosted application for `jenkins.fileinnout.com`.
 2. Add an Access policy that includes only the visitor email addresses or the
    allowed email domain.
-3. Keep the product-level permissions read-only after Access lets the visitor
-   through.
+3. Keep Jenkins permissions read-only after Access lets the visitor through.
 
 For Kiali, this profile uses:
 
@@ -141,15 +152,15 @@ deployment:
   view_only_mode: true
 ```
 
-That means Cloudflare Access decides who can enter, and Kiali itself stays in
-read-only mode for anyone who enters. If per-user Kiali identity is needed
-later, replace anonymous auth with OIDC or a header-based auth proxy.
+That means Kiali is public but cannot be used to change mesh resources through
+the UI. If per-user Kiali identity is needed later, put it behind Cloudflare
+Access and replace anonymous auth with OIDC or a header-based auth proxy.
 
 For Jaeger, do not create a fake in-app visitor account. Jaeger all-in-one in
-this profile does not provide a separate visitor account model. Make it
-read-only behind Cloudflare Access: only expose the `jaeger-query` UI, and do
-not expose the internal `jaeger-collector` service or OTLP ports publicly. The
-current ingress points to `jaeger-query` only.
+this profile does not provide a separate visitor account model. Public access
+is limited to the `jaeger-query` UI; do not expose the internal
+`jaeger-collector` service or OTLP ports publicly. The current ingress points
+to `jaeger-query` only.
 
 ## Resource Budget
 
