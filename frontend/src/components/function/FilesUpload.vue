@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="relative">
     <button
       @click="toggleDropdown"
@@ -1141,7 +1141,7 @@ const handleUpload = async (event, uploadTypeLabel) => {
   }
 
   if (selectedFiles.length > maxUploadCount.value) {
-    const message = `\uD55C \uBC88\uC5D0 \uCD5C\uB300 ${maxUploadCount.value}\uAC1C\uAE4C\uC9C0 \uC5C5\uB85C\uB4DC\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.`
+    const message = `한 번에 최대 ${maxUploadCount.value}개까지 업로드할 수 있습니다.`
     uploadError.value = message
     emit("upload-fail", message)
 
@@ -1154,7 +1154,7 @@ const handleUpload = async (event, uploadTypeLabel) => {
 
   const oversizedFile = selectedFiles.find((file) => Number(file?.size || 0) > maxUploadFileBytes.value)
   if (oversizedFile) {
-    const message = `\"${oversizedFile.name}\" \uD30C\uC77C\uC740 \uD604\uC7AC \uBA64\uBC84\uC2ED \uD55C\uB3C4(${formatUploadLimitBytes(maxUploadFileBytes.value)})\uB97C \uCD08\uACFC\uD574 \uC5C5\uB85C\uB4DC\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.`
+    const message = `\"${oversizedFile.name}\" 파일은 현재 멤버십 한도(${formatUploadLimitBytes(maxUploadFileBytes.value)})를 초과해 업로드할 수 없습니다.`
     uploadError.value = message
     emit("upload-fail", message)
 

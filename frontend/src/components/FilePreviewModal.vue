@@ -1,4 +1,4 @@
-<script setup>
+﻿<script setup>
 import { computed, ref, watch } from "vue";
 import { useFileStore } from "@/stores/useFileStore";
 import { downloadFileAsset } from "@/api/filesApi.js";
@@ -52,7 +52,7 @@ const handleDownload = async () => {
     isDownloading.value = true;
     await downloadFileAsset(props.file);
   } catch (error) {
-    toast.error(error?.message || "\uD30C\uC77C\uC744 \uB2E4\uC6B4\uB85C\uB4DC\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.");
+    toast.error(error?.message || "파일을 다운로드하지 못했습니다.");
   } finally {
     isDownloading.value = false;
   }
@@ -263,7 +263,7 @@ watch(
           <button v-if="!canDownload" type="button" class="inline-flex w-full items-center justify-center rounded-2xl bg-slate-200 px-4 py-3 text-sm font-semibold text-slate-500" disabled>
             {{ isLockedFile ? '잠긴 파일은 다운로드할 수 없습니다.' : '다운로드 불가' }}
           </button>
-          <button v-else type="button" class="inline-flex w-full items-center justify-center rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300" :disabled="isDownloading" @click="handleDownload">{{ isDownloading ? "\uB2E4\uC6B4\uB85C\uB4DC \uC911..." : "\uB2E4\uC6B4\uB85C\uB4DC" }}</button>
+          <button v-else type="button" class="inline-flex w-full items-center justify-center rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300" :disabled="isDownloading" @click="handleDownload">{{ isDownloading ? "다운로드 중..." : "다운로드" }}</button>
         </div>
       </aside>
     </div>

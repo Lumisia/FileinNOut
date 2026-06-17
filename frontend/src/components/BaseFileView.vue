@@ -1,4 +1,4 @@
-<script setup>
+﻿<script setup>
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import FilePreviewModal from "@/components/FilePreviewModal.vue";
@@ -94,13 +94,13 @@ const sharePendingInvites = ref([]);
 const sizeOptions = FILE_SIZE_OPTIONS;
 const statusOptions = FILE_STATUS_OPTIONS;
 const sortOptions = [
-  { label: "\uCD5C\uADFC \uC218\uC815\uC21C", value: "updatedAt-desc" },
-  { label: "\uC624\uB798\uB41C \uC218\uC815\uC21C", value: "updatedAt-asc" },
-  { label: "\uC774\uB984 \uC624\uB984\uCC28\uC21C", value: "name-asc" },
-  { label: "\uC774\uB984 \uB0B4\uB9BC\uCC28\uC21C", value: "name-desc" },
-  { label: "\uD070 \uD30C\uC77C \uC21C", value: "size-desc" },
-  { label: "\uC791\uC740 \uD30C\uC77C \uC21C", value: "size-asc" },
-  { label: "\uCD5C\uADFC \uACF5\uC720\uC21C", value: "sharedAt-desc" },
+  { label: "최근 수정순", value: "updatedAt-desc" },
+  { label: "오래된 수정순", value: "updatedAt-asc" },
+  { label: "이름 오름차순", value: "name-asc" },
+  { label: "이름 내림차순", value: "name-desc" },
+  { label: "큰 파일 순", value: "size-desc" },
+  { label: "작은 파일 순", value: "size-asc" },
+  { label: "최근 공유순", value: "sharedAt-desc" },
 ];
 const layoutPresetOptions = [
   { value: "10", label: "10개" },
@@ -141,7 +141,7 @@ const triggerDownload = async (file) => {
   try {
     await downloadFileAsset(file);
   } catch (error) {
-    toast.error(error?.message || "\uD30C\uC77C\uC744 \uB2E4\uC6B4\uB85C\uB4DC\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.");
+    toast.error(error?.message || "파일을 다운로드하지 못했습니다.");
   }
 };
 
@@ -215,10 +215,10 @@ const customSizeRangeLabel = computed(() => {
   if (searchState.value.sizeFilter !== "custom") return "";
   const min = searchState.value.customMinSize?.trim();
   const max = searchState.value.customMaxSize?.trim();
-  if (!min && !max) return "\uBC94\uC704\uB97C \uC785\uB825\uD558\uC138\uC694.";
+  if (!min && !max) return "범위를 입력하세요.";
   if (min && max) return `${min}MB ~ ${max}MB`;
-  if (min) return min + "MB \uC774\uC0C1";
-  return max + "MB \uC774\uD558";
+  if (min) return min + "MB 이상";
+  return max + "MB 이하";
 });
 
 const hasSearchFilters = computed(() => (
@@ -236,18 +236,18 @@ const layoutGuideSummary = computed(() => (
 const layoutGuideHint = computed(() => (
   `현재 한 페이지에 ${pageSize.value}개씩 표시됩니다.`
 ));
-const resetFiltersLabel = "\uC870\uAC74 \uCD08\uAE30\uD654";
-const customSizeChipPrefix = "\uC0AC\uC6A9\uC790 \uD06C\uAE30";
+const resetFiltersLabel = "조건 초기화";
+const customSizeChipPrefix = "사용자 크기";
 const hasVisibleToolbarChips = computed(() => (
   activeFilterChips.value.length > 0 || searchState.value.sizeFilter === "custom"
 ));
 const activeFilterChips = computed(() => {
   const chips = [];
-  if (searchState.value.searchQuery.trim()) chips.push("\uAC80\uC0C9: " + searchState.value.searchQuery.trim());
-  if (searchState.value.extensionFilter !== "all") chips.push("\uD655\uC7A5\uC790: " + searchState.value.extensionFilter.toUpperCase());
-  if (searchState.value.sizeFilter !== "all") chips.push("\uD06C\uAE30: " + (sizeOptionLabelMap[searchState.value.sizeFilter] || "\uC0AC\uC6A9\uC790 \uC124\uC815"));
-  if (searchState.value.statusFilter !== "all") chips.push("\uC0C1\uD0DC: " + (statusOptionLabelMap[searchState.value.statusFilter] || "\uC0AC\uC6A9\uC790 \uC124\uC815"));
-  if (sortOption.value !== "updatedAt-desc") chips.push("\uC815\uB82C: " + (sortOptions.find((option) => option.value === sortOption.value)?.label || "\uC0AC\uC6A9\uC790 \uC124\uC815"));
+  if (searchState.value.searchQuery.trim()) chips.push("검색: " + searchState.value.searchQuery.trim());
+  if (searchState.value.extensionFilter !== "all") chips.push("확장자: " + searchState.value.extensionFilter.toUpperCase());
+  if (searchState.value.sizeFilter !== "all") chips.push("크기: " + (sizeOptionLabelMap[searchState.value.sizeFilter] || "사용자 설정"));
+  if (searchState.value.statusFilter !== "all") chips.push("상태: " + (statusOptionLabelMap[searchState.value.statusFilter] || "사용자 설정"));
+  if (sortOption.value !== "updatedAt-desc") chips.push("정렬: " + (sortOptions.find((option) => option.value === sortOption.value)?.label || "사용자 설정"));
   return chips;
 });
 const matchesSizeFilter = (file) => {
@@ -534,14 +534,14 @@ const handleRestoreSelected = async () => {
 const handleDeleteSelected = async () => {
   if (!selectedFiles.value.length) return;
   if (selectedFiles.value.some((file) => file?.lockedFile)) {
-    toast.warning("\uC7A0\uAE34 \uD30C\uC77C\uC740 \uC0AD\uC81C\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.");
+    toast.warning("잠긴 파일은 삭제할 수 없습니다.");
     return;
   }
   const confirmMessage = selectedFiles.value.some(isOwnedSharedFile)
     ? "공유된 파일입니다 삭제하시겠습니까? 공유된 사람에게도 사라집니다."
     : props.deleteMode === "permanent"
-      ? "\uC120\uD0DD\uD55C " + selectedFiles.value.length + "\uAC1C \uD56D\uBAA9\uC744 \uC601\uAD6C \uC0AD\uC81C\uD558\uC2DC\uACA0\uC2B5\uB2C8\uAE4C?"
-      : "\uC120\uD0DD\uD55C " + selectedFiles.value.length + "\uAC1C \uD56D\uBAA9\uC744 \uD734\uC9C0\uD1B5\uC73C\uB85C \uC774\uB3D9\uD558\uC2DC\uACA0\uC2B5\uB2C8\uAE4C?";
+      ? "선택한 " + selectedFiles.value.length + "개 항목을 영구 삭제하시겠습니까?"
+      : "선택한 " + selectedFiles.value.length + "개 항목을 휴지통으로 이동하시겠습니까?";
   if (!(await confirm({ title: props.deleteMode === 'permanent' ? '영구 삭제' : '삭제', message: confirmMessage, confirmText: props.deleteMode === 'permanent' ? '영구 삭제' : '삭제', danger: true }))) return;
   try {
     const ids = selectedFiles.value.map((file) => file.id);
@@ -560,13 +560,13 @@ const handleDeleteSelected = async () => {
       undoErrorMessage: "실행 취소에 실패했습니다.",
     });
   } catch (error) {
-    toast.error(getActionErrorMessage(error, "\uC120\uD0DD\uD55C \uD56D\uBAA9\uC744 \uCC98\uB9AC\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4."));
+    toast.error(getActionErrorMessage(error, "선택한 항목을 처리하지 못했습니다."));
   }
 };
 
 const handleBatchDownload = () => {
   if (!selectedDownloadableFiles.value.length) {
-    toast.warning("\uB2E4\uC6B4\uB85C\uB4DC\uD560 \uC218 \uC788\uB294 \uD30C\uC77C\uC774 \uC120\uD0DD\uB418\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4.");
+    toast.warning("다운로드할 수 있는 파일이 선택되지 않았습니다.");
     return;
   }
   selectedDownloadableFiles.value.forEach((file, index) => {
@@ -577,15 +577,15 @@ const handleBatchDownload = () => {
 const handleSaveSharedToDrive = async (file) => {
   try {
     await fileStore.saveSharedFileToDrive(file.id, fileStore.currentFolderId);
-    toast.success("\uB0B4 \uB4DC\uB77C\uC774\uBE0C\uC5D0 \uC800\uC7A5\uD588\uC2B5\uB2C8\uB2E4.");
+    toast.success("내 드라이브에 저장했습니다.");
   } catch (error) {
-    toast.error(error?.response?.data?.message || error?.message || "\uACF5\uC720 \uD30C\uC77C\uC744 \uC800\uC7A5\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.");
+    toast.error(error?.response?.data?.message || error?.message || "공유 파일을 저장하지 못했습니다.");
   }
 };
 
 const handleBatchSaveShared = async () => {
   if (!selectedSharedFiles.value.length) {
-    toast.warning("\uB0B4 \uB4DC\uB77C\uC774\uBE0C\uB85C \uC800\uC7A5\uD560 \uACF5\uC720 \uD30C\uC77C\uC774 \uC120\uD0DD\uB418\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4.");
+    toast.warning("내 드라이브로 저장할 공유 파일이 선택되지 않았습니다.");
     return;
   }
   try {
@@ -593,9 +593,9 @@ const handleBatchSaveShared = async () => {
       await fileStore.saveSharedFileToDrive(file.id, fileStore.currentFolderId);
     }
     clearSelection();
-    toast.success("\uC120\uD0DD\uD55C \uACF5\uC720 \uD30C\uC77C\uC744 \uB0B4 \uB4DC\uB77C\uC774\uBE0C\uC5D0 \uC800\uC7A5\uD588\uC2B5\uB2C8\uB2E4.");
+    toast.success("선택한 공유 파일을 내 드라이브에 저장했습니다.");
   } catch (error) {
-    toast.error(error?.response?.data?.message || error?.message || "\uACF5\uC720 \uD30C\uC77C\uC744 \uC800\uC7A5\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.");
+    toast.error(error?.response?.data?.message || error?.message || "공유 파일을 저장하지 못했습니다.");
   }
 };
 
@@ -714,7 +714,7 @@ const loadShareInfo = async () => {
     );
     shareInfo.value = aggregateShareInfoEntries(shareResponses.flat());
   } catch (error) {
-    shareError.value = error?.response?.data?.message || error?.message || "\uACF5\uC720 \uC815\uBCF4\uB97C \uBD88\uB7EC\uC624\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.";
+    shareError.value = error?.response?.data?.message || error?.message || "공유 정보를 불러오지 못했습니다.";
   } finally {
     isShareInfoLoading.value = false;
   }
@@ -733,7 +733,7 @@ const loadShareGroupOverview = async () => {
     shareGroupOverview.value = await fetchGroupOverview();
   } catch (error) {
     shareGroupOverview.value = null;
-    shareError.value = error?.response?.data?.message || error?.message || "\uADF8\uB8F9 \uBAA9\uB85D\uC744 \uBD88\uB7EC\uC624\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.";
+    shareError.value = error?.response?.data?.message || error?.message || "그룹 목록을 불러오지 못했습니다.";
   } finally {
     isShareGroupOverviewLoading.value = false;
   }
@@ -742,7 +742,7 @@ const loadShareGroupOverview = async () => {
 const openShareDialog = async (files = selectedOwnedShareableFiles.value) => {
   const nextTargets = normalizeShareTargets(files).filter((file) => !file?.sharedWithMe && file?.type !== "folder" && (canCreateShares.value || file?.sharedFile));
   if (!nextTargets.length) {
-    toast.warning(canCreateShares.value ? "\uACF5\uC720\uD560 \uC218 \uC788\uB294 \uD30C\uC77C\uC744 \uC120\uD0DD\uD574 \uC8FC\uC138\uC694." : "\uD604\uC7AC \uBA64\uBC84\uC2ED\uC5D0\uC11C\uB294 \uC0C8 \uACF5\uC720\uB97C \uCD94\uAC00\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.");
+    toast.warning(canCreateShares.value ? "공유할 수 있는 파일을 선택해 주세요." : "현재 멤버십에서는 새 공유를 추가할 수 없습니다.");
     return;
   }
   shareTargets.value = nextTargets;
@@ -772,14 +772,14 @@ const closeShareDialog = () => {
 const submitShare = async () => {
   if (!shareTargets.value.length) return;
   if (!canCreateShares.value) {
-    shareError.value = "\uD604\uC7AC \uBA64\uBC84\uC2ED\uC5D0\uC11C\uB294 \uC0C8 \uACF5\uC720\uB97C \uCD94\uAC00\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.";
+    shareError.value = "현재 멤버십에서는 새 공유를 추가할 수 없습니다.";
     return;
   }
   const recipientEmail = shareEmail.value.trim();
   const selectedUserIds = shareTargetUserIds.value.filter(Boolean);
   const selectedGroupIds = shareTargetGroupIds.value.filter(Boolean);
   if (!recipientEmail && !selectedUserIds.length && !selectedGroupIds.length) {
-    shareError.value = "\uACF5\uC720\uD560 \uC0AC\uC6A9\uC790, \uADF8\uB8F9, \uC774\uBA54\uC77C \uC911 \uD558\uB098 \uC774\uC0C1\uC744 \uC120\uD0DD\uD574 \uC8FC\uC138\uC694.";
+    shareError.value = "공유할 사용자, 그룹, 이메일 중 하나 이상을 선택해 주세요.";
     return;
   }
   isSharing.value = true;
@@ -798,7 +798,7 @@ const submitShare = async () => {
     sharePendingInvites.value = result?.pendingInvites || [];
     await loadShareInfo();
   } catch (error) {
-    shareError.value = error?.response?.data?.message || error?.message || "\uD30C\uC77C\uC744 \uACF5\uC720\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.";
+    shareError.value = error?.response?.data?.message || error?.message || "파일을 공유하지 못했습니다.";
   } finally {
     isSharing.value = false;
   }
@@ -808,7 +808,7 @@ const cancelShare = async (recipientEmail = shareCancelEmail.value) => {
   if (!shareTargets.value.length) return;
   const normalizedEmail = String(recipientEmail || "").trim();
   if (!normalizedEmail) {
-    shareError.value = "\uACF5\uC720 \uCDE8\uC18C\uD560 \uC774\uBA54\uC77C\uC744 \uC785\uB825\uD574 \uC8FC\uC138\uC694.";
+    shareError.value = "공유 취소할 이메일을 입력해 주세요.";
     return;
   }
   isSharing.value = true;
@@ -833,7 +833,7 @@ const cancelShare = async (recipientEmail = shareCancelEmail.value) => {
     });
   } catch (error) {
     shareInfo.value = previousShareInfo;
-    shareError.value = getActionErrorMessage(error, "\uACF5\uC720\uB97C \uCDE8\uC18C\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.");
+    shareError.value = getActionErrorMessage(error, "공유를 취소하지 못했습니다.");
   } finally {
     isSharing.value = false;
   }
@@ -841,11 +841,11 @@ const cancelShare = async (recipientEmail = shareCancelEmail.value) => {
 
 const handleBatchLock = async (locked) => {
   if (!selectedLockableFiles.value.length) {
-    toast.warning("\uC7A0\uAE00 \uC218 \uC788\uB294 \uD30C\uC77C\uC774 \uC120\uD0DD\uB418\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4.");
+    toast.warning("잠글 수 있는 파일이 선택되지 않았습니다.");
     return;
   }
   if (locked && !canCreateLocks.value) {
-    toast.warning("\uD604\uC7AC \uBA64\uBC84\uC2ED\uC5D0\uC11C\uB294 \uD30C\uC77C \uC7A0\uAE08 \uAE30\uB2A5\uC744 \uC0AC\uC6A9\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.");
+    toast.warning("현재 멤버십에서는 파일 잠금 기능을 사용할 수 없습니다.");
     return;
   }
   try {
@@ -853,19 +853,19 @@ const handleBatchLock = async (locked) => {
     await fileStore.setFilesLocked(targetFiles.map((file) => file.id), locked);
     clearSelection();
   } catch (error) {
-    toast.error(error?.response?.data?.message || error?.message || "\uD30C\uC77C \uC7A0\uAE08 \uC0C1\uD0DC\uB97C \uBCC0\uACBD\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.");
+    toast.error(error?.response?.data?.message || error?.message || "파일 잠금 상태를 변경하지 못했습니다.");
   }
 };
 
 const handleToggleLock = async (file) => {
   if (!file?.lockedFile && !canCreateLocks.value) {
-    toast.warning("\uD604\uC7AC \uBA64\uBC84\uC2ED\uC5D0\uC11C\uB294 \uD30C\uC77C \uC7A0\uAE08 \uAE30\uB2A5\uC744 \uC0AC\uC6A9\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.");
+    toast.warning("현재 멤버십에서는 파일 잠금 기능을 사용할 수 없습니다.");
     return;
   }
   try {
     await fileStore.setFilesLocked([file.id], !file.lockedFile);
   } catch (error) {
-    toast.error(error?.response?.data?.message || error?.message || "\uD30C\uC77C \uC7A0\uAE08 \uC0C1\uD0DC\uB97C \uBCC0\uACBD\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.");
+    toast.error(error?.response?.data?.message || error?.message || "파일 잠금 상태를 변경하지 못했습니다.");
   }
 };
 
@@ -887,7 +887,7 @@ const submitRenameFolder = async () => {
   const normalizedName = renameValue.value.trim();
   if (!renameTarget.value?.id) return;
   if (!normalizedName) {
-    renameError.value = "\uD3F4\uB354 \uC774\uB984\uC744 \uC785\uB825\uD574 \uC8FC\uC138\uC694.";
+    renameError.value = "폴더 이름을 입력해 주세요.";
     return;
   }
   isRenaming.value = true;
@@ -896,7 +896,7 @@ const submitRenameFolder = async () => {
     await fileStore.renameFolder(renameTarget.value.id, normalizedName);
     closeRenameModal();
   } catch (error) {
-    renameError.value = error?.response?.data?.message || error?.message || "\uD3F4\uB354 \uC774\uB984\uC744 \uBCC0\uACBD\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.";
+    renameError.value = error?.response?.data?.message || error?.message || "폴더 이름을 변경하지 못했습니다.";
   } finally {
     isRenaming.value = false;
   }
@@ -911,7 +911,7 @@ const openFolderProperties = async (folder) => {
   try {
     propertySummary.value = await fileStore.fetchFolderProperties(folder.id);
   } catch (error) {
-    propertyError.value = error?.response?.data?.message || error?.message || "\uD3F4\uB354 \uC18D\uC131\uC744 \uBD88\uB7EC\uC624\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.";
+    propertyError.value = error?.response?.data?.message || error?.message || "폴더 속성을 불러오지 못했습니다.";
   } finally {
     isPropertyLoading.value = false;
   }
@@ -971,7 +971,7 @@ onMounted(() => {
           <div v-if="showFolderNavigation" class="toolbar-folder-panel">
             <div class="toolbar-folder-panel__header">
               <div class="min-w-0">
-                <p class="toolbar-folder-panel__label">{{ "\uD604\uC7AC \uC704\uCE58" }}</p>
+                <p class="toolbar-folder-panel__label">{{ "현재 위치" }}</p>
                 <div class="toolbar-folder-panel__path">
                   <template v-for="segment in folderPathSegments" :key="segment.id ?? 'root'">
                     <button type="button" class="breadcrumb-button" @click="navigateToFolder(segment.id)">{{ segment.name }}</button>
@@ -980,8 +980,8 @@ onMounted(() => {
                 </div>
               </div>
               <div v-if="fileStore.currentFolder" class="toolbar-folder-panel__actions">
-                <button type="button" class="toolbar-inline-button toolbar-inline-button--accent" @click="openFolderProperties(fileStore.currentFolder)">{{ "\uC18D\uC131 \uBCF4\uAE30" }}</button>
-                <button type="button" class="toolbar-inline-button" @click="handleGoBack">{{ "\uC0C1\uC704 \uD3F4\uB354\uB85C" }}</button>
+                <button type="button" class="toolbar-inline-button toolbar-inline-button--accent" @click="openFolderProperties(fileStore.currentFolder)">{{ "속성 보기" }}</button>
+                <button type="button" class="toolbar-inline-button" @click="handleGoBack">{{ "상위 폴더로" }}</button>
               </div>
             </div>
             <div v-if="folderSummaryCards.length > 0" class="toolbar-folder-stats">
@@ -995,7 +995,7 @@ onMounted(() => {
 
         <div class="toolbar-controls">
           <label class="file-filter">
-            <span class="file-filter__label">{{ "\uC815\uB82C" }}</span>
+            <span class="file-filter__label">{{ "정렬" }}</span>
             <select v-model="sortOption" class="file-filter__input"><option v-for="option in sortOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select>
           </label>
           <label class="file-filter">
@@ -1011,11 +1011,11 @@ onMounted(() => {
             <p class="file-filter__hint">{{ layoutGuideHint }}</p>
           </label>
           <div class="file-filter">
-            <span class="file-filter__label">{{ "\uBCF4\uAE30 \uBAA8\uB4DC" }}</span>
+            <span class="file-filter__label">{{ "보기 모드" }}</span>
             <div class="toolbar-toggle-group">
-              <button type="button" class="view-toggle" :class="{ 'is-active': viewMode === 'table' }" @click="setViewMode('table')">{{ "\uB9AC\uC2A4\uD2B8" }}</button>
-              <button type="button" class="view-toggle" :class="{ 'is-active': viewMode === 'grid' }" @click="setViewMode('grid')">{{ "\uCE74\uB4DC" }}</button>
-              <button type="button" class="view-toggle" :class="{ 'is-active': viewMode === 'icon' }" @click="setViewMode('icon')">{{ "\uC544\uC774\uCF58" }}</button>
+              <button type="button" class="view-toggle" :class="{ 'is-active': viewMode === 'table' }" @click="setViewMode('table')">{{ "리스트" }}</button>
+              <button type="button" class="view-toggle" :class="{ 'is-active': viewMode === 'grid' }" @click="setViewMode('grid')">{{ "카드" }}</button>
+              <button type="button" class="view-toggle" :class="{ 'is-active': viewMode === 'icon' }" @click="setViewMode('icon')">{{ "아이콘" }}</button>
             </div>
           </div>
         </div>
@@ -1025,19 +1025,19 @@ onMounted(() => {
 
     <div v-if="selectedFiles.length > 0" class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3">
       <div>
-        <p class="text-sm font-semibold text-blue-900">{{ selectedFiles.length }}{{ "\uAC1C \uC120\uD0DD\uB428" }}</p>
-        <p class="text-xs text-blue-700">{{ "\uC120\uD0DD\uD55C \uD30C\uC77C\uACFC \uD3F4\uB354\uC5D0 \uAC19\uC740 \uC791\uC5C5\uC744 \uC801\uC6A9\uD569\uB2C8\uB2E4." }}</p>
+        <p class="text-sm font-semibold text-blue-900">{{ selectedFiles.length }}{{ "개 선택됨" }}</p>
+        <p class="text-xs text-blue-700">{{ "선택한 파일과 폴더에 같은 작업을 적용합니다." }}</p>
       </div>
       <div class="flex flex-wrap items-center gap-2">
-        <button v-if="selectedDownloadableFiles.length > 0" type="button" class="batch-button bg-white text-blue-700 hover:bg-blue-100" @click="handleBatchDownload">{{ "\uC120\uD0DD \uB2E4\uC6B4\uB85C\uB4DC" }}</button>
-        <button v-if="selectedSharedFiles.length > 0" type="button" class="batch-button bg-white text-cyan-700 hover:bg-cyan-100" @click="handleBatchSaveShared">{{ "\uC120\uD0DD \uD30C\uC77C \uC800\uC7A5" }}</button>
+        <button v-if="selectedDownloadableFiles.length > 0" type="button" class="batch-button bg-white text-blue-700 hover:bg-blue-100" @click="handleBatchDownload">{{ "선택 다운로드" }}</button>
+        <button v-if="selectedSharedFiles.length > 0" type="button" class="batch-button bg-white text-cyan-700 hover:bg-cyan-100" @click="handleBatchSaveShared">{{ "선택 파일 저장" }}</button>
         <button v-if="sharedLibrary && selectedCancelableSentSharedFiles.length > 0" type="button" class="batch-button bg-white text-violet-700 hover:bg-violet-100" @click="handleBatchCancelSentShares">선택 공유 취소</button>
-        <button v-if="!sharedLibrary && deleteMode !== 'permanent' && selectedOwnedShareableFiles.length > 0" type="button" class="batch-button bg-white text-emerald-700 hover:bg-emerald-100" @click="openShareDialog()">{{ "\uC120\uD0DD \uACF5\uC720" }}</button>
-        <button v-if="!sharedLibrary && deleteMode !== 'permanent' && canCreateLocks && selectedLockCandidates.length > 0" type="button" class="batch-button bg-white text-amber-700 hover:bg-amber-100" @click="handleBatchLock(true)">{{ "\uC120\uD0DD \uC7A0\uAE08" }}</button>
-        <button v-if="!sharedLibrary && deleteMode !== 'permanent' && selectedLockedFiles.length > 0" type="button" class="batch-button bg-white text-slate-700 hover:bg-slate-200" @click="handleBatchLock(false)">{{ "\uC7A0\uAE08 \uD574\uC81C" }}</button>
+        <button v-if="!sharedLibrary && deleteMode !== 'permanent' && selectedOwnedShareableFiles.length > 0" type="button" class="batch-button bg-white text-emerald-700 hover:bg-emerald-100" @click="openShareDialog()">{{ "선택 공유" }}</button>
+        <button v-if="!sharedLibrary && deleteMode !== 'permanent' && canCreateLocks && selectedLockCandidates.length > 0" type="button" class="batch-button bg-white text-amber-700 hover:bg-amber-100" @click="handleBatchLock(true)">{{ "선택 잠금" }}</button>
+        <button v-if="!sharedLibrary && deleteMode !== 'permanent' && selectedLockedFiles.length > 0" type="button" class="batch-button bg-white text-slate-700 hover:bg-slate-200" @click="handleBatchLock(false)">{{ "잠금 해제" }}</button>
         <button v-if="!sharedLibrary && deleteMode === 'permanent'" type="button" class="batch-button bg-white text-emerald-700 hover:bg-emerald-100" @click="handleRestoreSelected">원래 위치로 복구</button>
-        <button v-if="!sharedLibrary" type="button" class="batch-button bg-white text-rose-600 hover:bg-rose-100" @click="handleDeleteSelected">{{ deleteMode === 'permanent' ? "\uC120\uD0DD \uC601\uAD6C \uC0AD\uC81C" : "\uC120\uD0DD \uC0AD\uC81C" }}</button>
-        <button type="button" class="batch-button bg-transparent text-blue-700 hover:bg-blue-100" @click="clearSelection">{{ "\uC120\uD0DD \uD574\uC81C" }}</button>
+        <button v-if="!sharedLibrary" type="button" class="batch-button bg-white text-rose-600 hover:bg-rose-100" @click="handleDeleteSelected">{{ deleteMode === 'permanent' ? "선택 영구 삭제" : "선택 삭제" }}</button>
+        <button type="button" class="batch-button bg-transparent text-blue-700 hover:bg-blue-100" @click="clearSelection">{{ "선택 해제" }}</button>
       </div>
     </div>
     <div v-if="isInitialLoading" class="file-list-skeleton rounded-2xl border border-gray-200 bg-white p-4 shadow-sm" aria-label="파일 목록을 불러오는 중입니다.">
@@ -1084,11 +1084,11 @@ onMounted(() => {
         />
 
         <div class="file-pagination-bar mt-4 rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
-          <p class="text-sm text-gray-500">{{ currentPage }} / {{ pageCount }} {{ "\uD398\uC774\uC9C0" }}</p>
+          <p class="text-sm text-gray-500">{{ currentPage }} / {{ pageCount }} {{ "페이지" }}</p>
           <div class="file-pagination-bar__pages">
-            <button type="button" class="page-button" :disabled="currentPage === 1" @click="currentPage -= 1">{{ "\uC774\uC804" }}</button>
+            <button type="button" class="page-button" :disabled="currentPage === 1" @click="currentPage -= 1">{{ "이전" }}</button>
             <button v-for="page in pageNumbers" :key="page" type="button" class="page-button" :class="{ 'is-active': currentPage === page }" @click="currentPage = page">{{ page }}</button>
-            <button type="button" class="page-button" :disabled="currentPage === pageCount" @click="currentPage += 1">{{ "\uB2E4\uC74C" }}</button>
+            <button type="button" class="page-button" :disabled="currentPage === pageCount" @click="currentPage += 1">{{ "다음" }}</button>
           </div>
           <div class="file-pagination-bar__spacer" aria-hidden="true"></div>
         </div>
@@ -1098,8 +1098,8 @@ onMounted(() => {
       <EmptyState
         v-if="hasActiveFilters"
         icon="fa-solid fa-filter-circle-xmark"
-        title="\uAC80\uC0C9 \uACB0\uACFC\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4"
-        description="\uD604\uC7AC \uAC80\uC0C9\uC5B4\uB098 \uD544\uD130\uC5D0 \uB9DE\uB294 \uD30C\uC77C\uC774 \uC5C6\uC5B4\uC694. \uC870\uAC74\uC744 \uBC14\uAFB8\uAC70\uB098 \uCD08\uAE30\uD654\uD574 \uBCF4\uC138\uC694."
+        title="검색 결과가 없습니다"
+        description="현재 검색어나 필터에 맞는 파일이 없어요. 조건을 바꾸거나 초기화해 보세요."
       >
         <button type="button" class="empty-cta" @click="resetFilters">{{ resetFiltersLabel }}</button>
       </EmptyState>
@@ -1125,7 +1125,7 @@ onMounted(() => {
       >
         <div class="flex items-start justify-between gap-3">
           <div>
-            <p id="rename-modal-title" class="text-xs font-semibold uppercase tracking-wide text-gray-400">{{ "\uD3F4\uB354 \uC774\uB984 \uBCC0\uACBD" }}</p>
+            <p id="rename-modal-title" class="text-xs font-semibold uppercase tracking-wide text-gray-400">{{ "폴더 이름 변경" }}</p>
             <h3 class="mt-1 text-xl font-bold text-gray-900">{{ renameTarget.name }}</h3>
           </div>
           <button type="button" class="rounded-full p-2 text-gray-400 transition hover:bg-slate-100 hover:text-gray-600" @click="closeRenameModal">
@@ -1133,13 +1133,13 @@ onMounted(() => {
           </button>
         </div>
         <label class="mt-5 block">
-          <span class="mb-2 block text-sm font-semibold text-gray-600">{{ "\uC0C8 \uD3F4\uB354 \uC774\uB984" }}</span>
-          <input v-model="renameValue" type="text" maxlength="100" class="file-filter__input" :placeholder="'\uD3F4\uB354 \uC774\uB984\uC744 \uC785\uB825\uD558\uC138\uC694.'" @keydown.enter.prevent="submitRenameFolder" />
+          <span class="mb-2 block text-sm font-semibold text-gray-600">{{ "새 폴더 이름" }}</span>
+          <input v-model="renameValue" type="text" maxlength="100" class="file-filter__input" :placeholder="'폴더 이름을 입력하세요.'" @keydown.enter.prevent="submitRenameFolder" />
         </label>
         <p v-if="renameError" class="mt-3 text-sm text-rose-500">{{ renameError }}</p>
         <div class="mt-6 flex justify-end gap-2">
-          <button type="button" class="rounded-full border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-50" @click="closeRenameModal">{{ "\uCDE8\uC18C" }}</button>
-          <button type="button" class="rounded-full bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300" :disabled="isRenaming" @click="submitRenameFolder">{{ isRenaming ? "\uBCC0\uACBD \uC911..." : "\uC774\uB984 \uC800\uC7A5" }}</button>
+          <button type="button" class="rounded-full border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-50" @click="closeRenameModal">{{ "취소" }}</button>
+          <button type="button" class="rounded-full bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300" :disabled="isRenaming" @click="submitRenameFolder">{{ isRenaming ? "변경 중..." : "이름 저장" }}</button>
         </div>
       </div>
     </div>
@@ -1155,7 +1155,7 @@ onMounted(() => {
       >
         <div class="flex items-start justify-between gap-3">
           <div>
-            <p id="property-modal-title" class="text-xs font-semibold uppercase tracking-wide text-gray-400">{{ "\uD3F4\uB354 \uC18D\uC131" }}</p>
+            <p id="property-modal-title" class="text-xs font-semibold uppercase tracking-wide text-gray-400">{{ "폴더 속성" }}</p>
             <h3 class="mt-1 text-xl font-bold text-gray-900">{{ propertySummary?.folderName || propertyTarget.name }}</h3>
             <p class="mt-2 text-sm text-gray-500">{{ propertyPathLabel }}</p>
           </div>
@@ -1163,30 +1163,30 @@ onMounted(() => {
             <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18 18 6M6 6l12 12" /></svg>
           </button>
         </div>
-        <div v-if="isPropertyLoading" class="mt-6 rounded-2xl border border-dashed border-gray-200 bg-slate-50 px-4 py-10 text-center text-sm text-gray-500">{{ "\uD3F4\uB354 \uC18D\uC131\uC744 \uBD88\uB7EC\uC624\uB294 \uC911\uC785\uB2C8\uB2E4." }}</div>
+        <div v-if="isPropertyLoading" class="mt-6 rounded-2xl border border-dashed border-gray-200 bg-slate-50 px-4 py-10 text-center text-sm text-gray-500">{{ "폴더 속성을 불러오는 중입니다." }}</div>
         <div v-else-if="propertyError" class="mt-6 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-4 text-sm text-rose-600">{{ propertyError }}</div>
         <div v-else-if="propertySummary" class="mt-6 space-y-6">
           <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <div class="rounded-2xl bg-slate-50 px-4 py-4"><p class="text-xs font-semibold uppercase tracking-wide text-gray-400">{{ "\uC9C1\uC811 \uD3EC\uD568 \uD56D\uBAA9" }}</p><p class="mt-2 text-2xl font-bold text-gray-900">{{ propertySummary.directChildCount }}</p></div>
-            <div class="rounded-2xl bg-slate-50 px-4 py-4"><p class="text-xs font-semibold uppercase tracking-wide text-gray-400">{{ "\uC804\uCCB4 \uD558\uC704 \uD56D\uBAA9" }}</p><p class="mt-2 text-2xl font-bold text-gray-900">{{ propertySummary.totalChildCount }}</p></div>
-            <div class="rounded-2xl bg-slate-50 px-4 py-4"><p class="text-xs font-semibold uppercase tracking-wide text-gray-400">{{ "\uC9C1\uC811 \uD3EC\uD568 \uD30C\uC77C \uD06C\uAE30" }}</p><p class="mt-2 text-2xl font-bold text-gray-900">{{ formatBytes(propertySummary.directSize) }}</p></div>
-            <div class="rounded-2xl bg-slate-50 px-4 py-4"><p class="text-xs font-semibold uppercase tracking-wide text-gray-400">{{ "\uC804\uCCB4 \uD30C\uC77C \uD06C\uAE30" }}</p><p class="mt-2 text-2xl font-bold text-gray-900">{{ formatBytes(propertySummary.totalSize) }}</p></div>
+            <div class="rounded-2xl bg-slate-50 px-4 py-4"><p class="text-xs font-semibold uppercase tracking-wide text-gray-400">{{ "직접 포함 항목" }}</p><p class="mt-2 text-2xl font-bold text-gray-900">{{ propertySummary.directChildCount }}</p></div>
+            <div class="rounded-2xl bg-slate-50 px-4 py-4"><p class="text-xs font-semibold uppercase tracking-wide text-gray-400">{{ "전체 하위 항목" }}</p><p class="mt-2 text-2xl font-bold text-gray-900">{{ propertySummary.totalChildCount }}</p></div>
+            <div class="rounded-2xl bg-slate-50 px-4 py-4"><p class="text-xs font-semibold uppercase tracking-wide text-gray-400">{{ "직접 포함 파일 크기" }}</p><p class="mt-2 text-2xl font-bold text-gray-900">{{ formatBytes(propertySummary.directSize) }}</p></div>
+            <div class="rounded-2xl bg-slate-50 px-4 py-4"><p class="text-xs font-semibold uppercase tracking-wide text-gray-400">{{ "전체 파일 크기" }}</p><p class="mt-2 text-2xl font-bold text-gray-900">{{ formatBytes(propertySummary.totalSize) }}</p></div>
           </div>
           <div class="grid gap-4 md:grid-cols-2">
             <div class="rounded-2xl border border-gray-200 px-4 py-4">
-              <p class="text-sm font-semibold text-gray-900">{{ "\uC9C1\uC811 \uD3EC\uD568 \uC815\uBCF4" }}</p>
+              <p class="text-sm font-semibold text-gray-900">{{ "직접 포함 정보" }}</p>
               <dl class="mt-4 space-y-3 text-sm text-gray-600">
-                <div class="flex items-center justify-between gap-4"><dt>{{ "\uD30C\uC77C \uC218" }}</dt><dd class="font-semibold text-gray-900">{{ propertySummary.directFileCount }}</dd></div>
-                <div class="flex items-center justify-between gap-4"><dt>{{ "\uD3F4\uB354 \uC218" }}</dt><dd class="font-semibold text-gray-900">{{ propertySummary.directFolderCount }}</dd></div>
-                <div class="flex items-center justify-between gap-4"><dt>{{ "\uB9C8\uC9C0\uB9C9 \uC218\uC815" }}</dt><dd class="font-semibold text-gray-900">{{ formatDisplayDate(propertySummary.lastModifyDate) }}</dd></div>
+                <div class="flex items-center justify-between gap-4"><dt>{{ "파일 수" }}</dt><dd class="font-semibold text-gray-900">{{ propertySummary.directFileCount }}</dd></div>
+                <div class="flex items-center justify-between gap-4"><dt>{{ "폴더 수" }}</dt><dd class="font-semibold text-gray-900">{{ propertySummary.directFolderCount }}</dd></div>
+                <div class="flex items-center justify-between gap-4"><dt>{{ "마지막 수정" }}</dt><dd class="font-semibold text-gray-900">{{ formatDisplayDate(propertySummary.lastModifyDate) }}</dd></div>
               </dl>
             </div>
             <div class="rounded-2xl border border-gray-200 px-4 py-4">
-              <p class="text-sm font-semibold text-gray-900">{{ "\uC804\uCCB4 \uD558\uC704 \uC815\uBCF4" }}</p>
+              <p class="text-sm font-semibold text-gray-900">{{ "전체 하위 정보" }}</p>
               <dl class="mt-4 space-y-3 text-sm text-gray-600">
-                <div class="flex items-center justify-between gap-4"><dt>{{ "\uC804\uCCB4 \uD30C\uC77C \uC218" }}</dt><dd class="font-semibold text-gray-900">{{ propertySummary.totalFileCount }}</dd></div>
-                <div class="flex items-center justify-between gap-4"><dt>{{ "\uC804\uCCB4 \uD3F4\uB354 \uC218" }}</dt><dd class="font-semibold text-gray-900">{{ propertySummary.totalFolderCount }}</dd></div>
-                <div class="flex items-center justify-between gap-4"><dt>{{ "\uC0DD\uC131 \uC2DC\uAC04" }}</dt><dd class="font-semibold text-gray-900">{{ formatDisplayDate(propertySummary.uploadDate) }}</dd></div>
+                <div class="flex items-center justify-between gap-4"><dt>{{ "전체 파일 수" }}</dt><dd class="font-semibold text-gray-900">{{ propertySummary.totalFileCount }}</dd></div>
+                <div class="flex items-center justify-between gap-4"><dt>{{ "전체 폴더 수" }}</dt><dd class="font-semibold text-gray-900">{{ propertySummary.totalFolderCount }}</dd></div>
+                <div class="flex items-center justify-between gap-4"><dt>{{ "생성 시간" }}</dt><dd class="font-semibold text-gray-900">{{ formatDisplayDate(propertySummary.uploadDate) }}</dd></div>
               </dl>
             </div>
           </div>
@@ -1204,17 +1204,17 @@ onMounted(() => {
       >
         <div class="flex items-start justify-between gap-3">
           <div>
-            <p id="share-dialog-title" class="text-xs font-semibold uppercase tracking-wide text-gray-400">{{ "\uD30C\uC77C \uACF5\uC720" }}</p>
-            <h3 class="mt-1 text-xl font-bold text-gray-900">{{ shareTargets.length === 1 ? shareTargets[0].name : shareTargets.length + "\uAC1C \uD30C\uC77C \uC120\uD0DD" }}</h3>
-            <p class="mt-2 text-sm text-gray-500">{{ "\uC774\uBA54\uC77C\uC744 \uC785\uB825\uD558\uBA74 \uB2E4\uC6B4\uB85C\uB4DC \uAD8C\uD55C\uC774 \uBD80\uC5EC\uB418\uACE0, \uC0C1\uB300\uBC29\uC758 \uACF5\uC720 \uBB38\uC11C\uD568\uC5D0\uC11C\uB3C4 \uD30C\uC77C\uC744 \uD655\uC778\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4." }}</p>
+            <p id="share-dialog-title" class="text-xs font-semibold uppercase tracking-wide text-gray-400">{{ "파일 공유" }}</p>
+            <h3 class="mt-1 text-xl font-bold text-gray-900">{{ shareTargets.length === 1 ? shareTargets[0].name : shareTargets.length + "개 파일 선택" }}</h3>
+            <p class="mt-2 text-sm text-gray-500">{{ "이메일을 입력하면 다운로드 권한이 부여되고, 상대방의 공유 문서함에서도 파일을 확인할 수 있습니다." }}</p>
           </div>
           <button type="button" class="rounded-full p-2 text-gray-400 transition hover:bg-slate-100 hover:text-gray-600" @click="closeShareDialog">
             <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18 18 6M6 6l12 12" /></svg>
           </button>
         </div>
           <div class="mt-5 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
-            <input v-model="shareEmail" type="email" class="file-filter__input" :disabled="!canCreateShares" :placeholder="canCreateShares ? '\uACF5\uC720\uD560 \uC0C1\uB300\uC758 \uC774\uBA54\uC77C' : '\uD50C\uB7EC\uC2A4 \uC774\uC0C1 \uBA64\uBC84\uC2ED\uC5D0\uC11C \uC0C8 \uACF5\uC720 \uCD94\uAC00 \uAC00\uB2A5'" @keydown.enter.prevent="submitShare" />
-            <button type="button" class="rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-300" :disabled="isSharing || !canCreateShares" @click="submitShare">{{ isSharing ? "\uACF5\uC720 \uC911..." : "\uACF5\uC720 \uC801\uC6A9" }}</button>
+            <input v-model="shareEmail" type="email" class="file-filter__input" :disabled="!canCreateShares" :placeholder="canCreateShares ? '공유할 상대의 이메일' : '플러스 이상 멤버십에서 새 공유 추가 가능'" @keydown.enter.prevent="submitShare" />
+            <button type="button" class="rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-300" :disabled="isSharing || !canCreateShares" @click="submitShare">{{ isSharing ? "공유 중..." : "공유 적용" }}</button>
           </div>
         <div class="mt-4 rounded-2xl border border-gray-200 p-4">
           <div class="flex items-center justify-between gap-2">
@@ -1252,8 +1252,8 @@ onMounted(() => {
           </div>
         </div>
         <div class="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
-          <input v-model="shareCancelEmail" type="email" class="file-filter__input" :placeholder="'\uACF5\uC720 \uCDE8\uC18C\uD560 \uC774\uBA54\uC77C'" @keydown.enter.prevent="cancelShare()" />
-          <button type="button" class="rounded-2xl border border-gray-200 px-4 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed" :disabled="isSharing" @click="cancelShare()">{{ "\uACF5\uC720 \uCDE8\uC18C" }}</button>
+          <input v-model="shareCancelEmail" type="email" class="file-filter__input" :placeholder="'공유 취소할 이메일'" @keydown.enter.prevent="cancelShare()" />
+          <button type="button" class="rounded-2xl border border-gray-200 px-4 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed" :disabled="isSharing" @click="cancelShare()">{{ "공유 취소" }}</button>
         </div>
         <p v-if="shareError" class="mt-3 text-sm text-rose-500">{{ shareError }}</p>
         <div v-if="sharePendingInvites.length" class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
@@ -1264,11 +1264,11 @@ onMounted(() => {
         </div>
         <div class="mt-6 rounded-2xl border border-gray-200 p-4">
           <div class="flex items-center justify-between gap-2">
-            <p class="text-sm font-semibold text-gray-900">{{ "\uD604\uC7AC \uACF5\uC720 \uBAA9\uB85D" }}</p>
-            <p class="text-xs text-gray-500">{{ "\uC120\uD0DD\uD55C \uD30C\uC77C\uB4E4\uC744 \uAE30\uC900\uC73C\uB85C \uC218\uC2E0\uC790\uC640 \uACF5\uC720 \uD30C\uC77C \uBAA9\uB85D\uC744 \uD568\uAED8 \uD45C\uC2DC\uD569\uB2C8\uB2E4." }}</p>
+            <p class="text-sm font-semibold text-gray-900">{{ "현재 공유 목록" }}</p>
+            <p class="text-xs text-gray-500">{{ "선택한 파일들을 기준으로 수신자와 공유 파일 목록을 함께 표시합니다." }}</p>
           </div>
-          <div v-if="isShareInfoLoading" class="mt-4 rounded-2xl bg-slate-50 px-4 py-8 text-center text-sm text-gray-500">{{ "\uACF5\uC720 \uC815\uBCF4\uB97C \uBD88\uB7EC\uC624\uB294 \uC911\uC785\uB2C8\uB2E4." }}</div>
-          <div v-else-if="shareInfo.length === 0" class="mt-4 rounded-2xl bg-slate-50 px-4 py-8 text-center text-sm text-gray-500">{{ "\uD604\uC7AC \uACF5\uC720 \uC911\uC778 \uC0C1\uB300\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4." }}</div>
+          <div v-if="isShareInfoLoading" class="mt-4 rounded-2xl bg-slate-50 px-4 py-8 text-center text-sm text-gray-500">{{ "공유 정보를 불러오는 중입니다." }}</div>
+          <div v-else-if="shareInfo.length === 0" class="mt-4 rounded-2xl bg-slate-50 px-4 py-8 text-center text-sm text-gray-500">{{ "현재 공유 중인 상대가 없습니다." }}</div>
           <div v-else class="mt-4 space-y-3">
             <div v-for="item in shareInfo" :key="item.shareIdx || `${item.fileIdx}-${item.recipientEmail}`" class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-gray-100 px-4 py-3">
               <div>
@@ -1277,7 +1277,7 @@ onMounted(() => {
                 <p class="mt-1 text-xs text-gray-500">파일: {{ formatSharedFilesLabel(item) }}</p>
                 <p class="mt-1 text-xs text-gray-400">{{ formatDisplayDate(item.createdAt) }}</p>
               </div>
-              <button type="button" class="rounded-full bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-100" @click="cancelShare(item.recipientEmail)">{{ "\uC774 \uC0C1\uB300 \uACF5\uC720 \uCDE8\uC18C" }}</button>
+              <button type="button" class="rounded-full bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-100" @click="cancelShare(item.recipientEmail)">{{ "이 상대 공유 취소" }}</button>
             </div>
           </div>
         </div>
