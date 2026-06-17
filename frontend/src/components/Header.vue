@@ -4,7 +4,6 @@ import { useRoute, useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { fetchSettingsProfile } from "@/api/featerApi";
 import loadpost from "./workspace/loadpost";
-import sseApi from "@/api/sseApi";
 import {
   FILE_SIZE_OPTIONS,
   FILE_STATUS_OPTIONS,
@@ -55,7 +54,6 @@ const lastFetchedAt = ref(0);
 const CACHE_TTL_MS = 2 * 60 * 1000; // 2분
 
 let broadcastChannel = null;
-let sseEventSource = null;
 const pendingNotificationDeletes = new Map();
 
 const isDarkMode = ref(false);
@@ -734,46 +732,25 @@ const handleClickOutside = (event) => {
   if (!event.target.closest("#header-search-container")) showSearchDropdown.value = false;
 };
 
-// ─── SSE ─────────────────────────────────────────────────────────────────────
-const stopSse = () => {
-  sseApi.closeSse(sseEventSource);
-  sseEventSource = null;
+// ─── SSE 알림 수신 ─────────────────────────────────────────────────────────────
+// 실시간 SSE 연결 자체는 useAuthStore가 단일 소유한다(로그인 시 연결, 로그아웃 시 종료).
+// Header는 그 연결이 재방출하는 window 이벤트 중 알림 배지에 필요한 것만 구독한다.
+const handleSseNotification = (event) => {
+  pushNewNotification(event.detail);
 };
 
-const startSse = () => {
-  stopSse();
-  sseEventSource = sseApi.connectNotificationSse({
-    onNotification: (payload) => {
-      pushNewNotification(payload);
-    },
-    onNewMessage: (payload) => {
-      pushNewNotification(payload);
-      window.dispatchEvent(new CustomEvent("sse-new-message", { detail: payload }));
-    },
-    onError: () => {
-      sseEventSource = null;
-      if (authStore.user?.idx) {
-        setTimeout(() => startSse(), 5000);
-      }
-    },
-  });
+const handleSseNewMessage = (event) => {
+  pushNewNotification(event.detail);
+};
 
-  sseEventSource.addEventListener("chat-preview-update", (e) => {
-    try {
-      const payload = JSON.parse(e.data);
-      window.dispatchEvent(new CustomEvent("sse-chat-preview-update", { detail: payload }));
-    } catch (error) {
-      console.warn("SSE chat preview payload parse failed:", error);
-    }
-  });
+const startSseListeners = () => {
+  window.addEventListener("sse-notification", handleSseNotification);
+  window.addEventListener("sse-new-message", handleSseNewMessage);
+};
 
-  sseEventSource.onerror = () => {
-    stopSse();
-    // 재연결 (5초 후)
-    if (authStore.user?.idx) {
-      setTimeout(() => startSse(), 5000);
-    }
-  };
+const stopSseListeners = () => {
+  window.removeEventListener("sse-notification", handleSseNotification);
+  window.removeEventListener("sse-new-message", handleSseNewMessage);
 };
 
 watch(() => route.fullPath, () => {
@@ -784,7 +761,6 @@ watch(
   () => authStore.user?.idx,
   async (userIdx) => {
     if (!userIdx) {
-      stopSse();
       notifications.value = [];
       lastFetchedAt.value = 0;
       updateNotifBadge();
@@ -792,7 +768,6 @@ watch(
     }
 
     await fetchNotifications();
-    startSse();
 
     void ensureStorageSummary("authenticated header");
 
@@ -807,6 +782,7 @@ watch(
 
 onMounted(() => {
   initTheme();
+  startSseListeners();
   authStore.checkLogin();
   loadSettingsProfile();
   setupNotificationChannel();
@@ -824,7 +800,7 @@ onBeforeUnmount(() => {
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.removeEventListener("message", swDirectMessageHandler);
   }
-  stopSse();
+  stopSseListeners();
 });
 </script>
 

@@ -104,30 +104,20 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   // SSE 처리
+  // 앱 전체에서 단 하나의 SSE 연결만 소유한다. 알림/메시지/제목/권한 등 모든 실시간
+  // 이벤트는 이 연결이 받아 window CustomEvent로 재방출하고, 각 컴포넌트가 구독한다.
   const startSseConnection = (userId) => {
     // 이미 연결된 경우 중복 연결 방지
     if (sseInstance.value) return;
 
-    sseInstance.value = sseApi.connectWorkspaceSse({
-      userId: userId,
+    sseInstance.value = sseApi.createSseConnection({
       onConnect: () => console.log(`[SSE] 사용자 ${userId} 연결 성공`),
-      onTitleUpdated: (updatedData) => {
-        // 방법 1: 직접 여기서 리스트를 관리하는 스토어의 액션을 호출
-        // const postStore = usePostStore();
-        // postStore.updateItemTitle(updatedData);
-        
-        // 방법 2: 커스텀 이벤트를 발생시켜 필요한 컴포넌트에서 듣게 함
-        window.dispatchEvent(new CustomEvent('sse-title-updated', { detail: updatedData }));
-      },
-      onError: () => {
-        sseInstance.value = null; // 에러 시 참조 제거
-      }
     });
   }
 
   const stopSseConnection = () => {
     if (sseInstance.value) {
-      sseApi.closeSse(sseInstance.value);
+      sseInstance.value.close();
       sseInstance.value = null;
     }
   }
