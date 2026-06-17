@@ -1,0 +1,89 @@
+# grafana/grafana values for OCI single-node k3s.
+# Grafana is public for the portfolio, but visitors get anonymous read-only
+# (Viewer). It reads the Prometheus that is already running, so it adds no new
+# scrape load.
+
+# 관리자 비밀번호는 차트가 무작위로 생성해 Secret에 저장한다(평문 금지).
+#   kubectl -n observability get secret grafana -o jsonpath="{.data.admin-password}" | base64 -d
+# 로 확인한다. adminPassword를 여기에 적지 말 것.
+
+replicas: 1
+
+resources:
+  requests:
+    cpu: "100m"
+    memory: "128Mi"
+  limits:
+    cpu: "200m"
+    memory: "256Mi"
+
+persistence:
+  enabled: true
+  type: pvc
+  storageClassName: "local-path"
+  size: 2Gi
+
+service:
+  type: ClusterIP
+  port: 80
+
+# 업데이트 체크/사용량 보고 비활성화. 익명 방문자는 Viewer(읽기 전용)로 들어온다.
+grafana.ini:
+  server:
+    root_url: "https://grafana.fileinnout.com"
+  analytics:
+    reporting_enabled: false
+    check_for_updates: false
+  users:
+    allow_sign_up: false
+  auth.anonymous:
+    enabled: true
+    org_name: "Main Org."
+    org_role: Viewer
+    hide_version: true
+
+# 이미 떠 있는 Prometheus/Jaeger를 데이터소스로 연결한다.
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus-server.observability.svc.cluster.local
+        isDefault: true
+        editable: false
+      - name: Jaeger
+        type: jaeger
+        access: proxy
+        url: http://jaeger-query.observability.svc.cluster.local:16686
+        editable: false
+
+# 포트폴리오용 기본 대시보드 자동 프로비저닝.
+# gnetId 대시보드는 배포 시 grafana.com에서 받아온다(노드에 인터넷 필요).
+# 오프라인 환경이면 dashboards / dashboardProviders 블록을 지워도 된다.
+dashboardProviders:
+  dashboardproviders.yaml:
+    apiVersion: 1
+    providers:
+      - name: default
+        orgId: 1
+        folder: ""
+        type: file
+        disableDeletion: true
+        editable: false
+        options:
+          path: /var/lib/grafana/dashboards/default
+
+dashboards:
+  default:
+    kubernetes-cluster:
+      # Kubernetes cluster monitoring (via Prometheus)
+      gnetId: 315
+      revision: 3
+      datasource: Prometheus
+    kube-state-metrics:
+      # Kubernetes / kube-state-metrics
+      gnetId: 13332
+      revision: 12
+      datasource: Prometheus

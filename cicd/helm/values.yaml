@@ -14,6 +14,28 @@ backend:
     pullPolicy: Always
   service:
     port: 8080
+  # 아래 키들은 ConfigMap이 아니라 Secret으로 렌더링된다.
+  # (읽기 전용 Kubernetes Dashboard의 view 롤은 Secret을 못 읽으므로 자격증명 노출이 차단된다.)
+  # 값은 그대로 backend.env에 두면 되고, 템플릿이 키 이름으로 분류한다.
+  secretKeys:
+    - PORTONE_SECRET
+    - JWT_KEY
+    - ADMIN_EMAIL
+    - ADMIN_PASSWORD
+    - GOOGLE_CLIENT_ID
+    - GOOGLE_CLIENT_SECRET
+    - NAVER_CLIENT_ID
+    - NAVER_CLIENT_SECRET
+    - CLIENT_ID
+    - CLIENT_SECRET
+    - MAIL_ID
+    - MAIL_PASS
+    - DB_ID
+    - DB_PASS
+    - MINIO_NAME
+    - MINIO_SECRET
+    - S3AMAZON_NAME
+    - S3AMAZON_SECRET
   env:
     # Public defaults only. Sensitive values are overridden from values.private.yaml.
     TZ: 'Asia/Seoul'
