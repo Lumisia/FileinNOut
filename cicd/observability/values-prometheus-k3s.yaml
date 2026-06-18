@@ -23,7 +23,9 @@ server:
   retention: "6h"
   # Prometheus는 자체 인증이 없고 prometheus.fileinnout.com이 공개이므로 lifecycle API를
   # 끈다. 켜져 있으면 외부에서 POST /-/quit 로 프로세스를 종료(DoS)할 수 있다.
-  enableLifecycle: false
+  # 이 차트는 `web.enable-lifecycle`를 server.extraFlags 기본값으로 주입하므로
+  # 빈 배열로 덮어써서 제거한다(server.enableLifecycle 키로는 안 빠진다).
+  extraFlags: []
   persistentVolume:
     enabled: true
     storageClass: "local-path"
