@@ -207,6 +207,12 @@ test('public ingress keeps API root private and exposes Swagger under backend co
   assert.match(apiRedirect, /permanent-redirect:\s*https:\/\/\{\{ \$frontendHost \}\}\/login/)
   assert.match(apiRedirect, /path:\s*\/\r?\n\s*pathType:\s*Exact/)
   assert.match(apiRedirect, /path:\s*\/api\/login\r?\n\s*pathType:\s*Exact/)
+
+  // Swagger host root has no backing controller (404), so redirect it to the UI.
+  const swaggerRedirect = readRepoFile('cicd/helm/templates/swagger-redirect-ingress.yaml')
+  assert.match(swaggerRedirect, /permanent-redirect:\s*https:\/\/\{\{ \$swaggerHost \}\}\/api\/swagger-ui\/index\.html/)
+  assert.match(swaggerRedirect, /host:\s*\{\{ \$swaggerHost \| quote \}\}/)
+  assert.match(swaggerRedirect, /path:\s*\/\r?\n\s*pathType:\s*Exact/)
 })
 
 test('app Dockerfiles use ARM64-capable base images for OCI aarch64 nodes', () => {

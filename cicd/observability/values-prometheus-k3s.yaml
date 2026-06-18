@@ -13,8 +13,17 @@ prometheus-node-exporter:
 prometheus-pushgateway:
   enabled: false
 
+# lifecycle를 끄면 configmap-reload 사이드카의 localhost /-/reload 호출이 405가 되므로
+# 사이드카도 비활성화한다. 스크랩 설정 변경은 pod 재시작으로 반영한다(정적 구성이라 충분).
+configmapReload:
+  prometheus:
+    enabled: false
+
 server:
   retention: "6h"
+  # Prometheus는 자체 인증이 없고 prometheus.fileinnout.com이 공개이므로 lifecycle API를
+  # 끈다. 켜져 있으면 외부에서 POST /-/quit 로 프로세스를 종료(DoS)할 수 있다.
+  enableLifecycle: false
   persistentVolume:
     enabled: true
     storageClass: "local-path"

@@ -22,6 +22,9 @@ test('observability profile contains lightweight Prometheus settings', () => {
   assert.match(values, /requests:[\s\S]*cpu:\s*"200m"[\s\S]*memory:\s*"512Mi"/)
   assert.doesNotMatch(values, /serverFiles:/)
   assert.doesNotMatch(values, /job_name:\s*prometheus/)
+  // 공개 무인증 엔드포인트라 /-/quit·/-/reload(lifecycle)와 reload 사이드카는 비활성.
+  assert.match(values, /enableLifecycle:\s*false/)
+  assert.match(values, /configmapReload:[\s\S]*prometheus:[\s\S]*enabled:\s*false/)
 })
 
 test('Kiali operator values point at Prometheus and Jaeger with small resources', () => {
@@ -82,12 +85,14 @@ test('public portfolio ingress also exposes Grafana, Prometheus, and the Dashboa
   assert.match(ingress, /backend-protocol:\s*"?HTTPS"?/)
 })
 
-test('Grafana values stay light and require admin login over Prometheus', () => {
+test('Grafana values stay light and expose read-only dashboards to anonymous visitors', () => {
   assert.equal(fileExists('cicd/observability/values-grafana-k3s.yaml'), true)
 
   const values = readRepoFile('cicd/observability/values-grafana-k3s.yaml')
   assert.match(values, /auth:[\s\S]*disable_login_form:\s*false/)
-  assert.match(values, /auth\.anonymous:[\s\S]*enabled:\s*false/)
+  // 포트폴리오 방문자가 로그인 없이 대시보드를 읽도록 익명 Viewer 허용. 편집/관리는 불가.
+  assert.match(values, /auth\.anonymous:[\s\S]*enabled:\s*true/)
+  assert.match(values, /auth\.anonymous:[\s\S]*org_role:\s*Viewer/)
   assert.match(values, /allow_sign_up:\s*false/)
   // 기존 Prometheus/Jaeger 데이터소스 재사용
   assert.match(values, /url:\s*http:\/\/prometheus-server\.observability\.svc\.cluster\.local/)
