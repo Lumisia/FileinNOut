@@ -99,3 +99,8 @@ dashboards:
       gnetId: 13332
       revision: 12
       datasource: Prometheus
+    node-exporter-full:
+      # Node Exporter Full — 호스트 CPU/RAM/Swap/Disk/Network/uptime
+      gnetId: 1860
+      revision: 45
+      datasource: Prometheus
