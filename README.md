@@ -34,6 +34,7 @@
 <a href="#기술-스택">기술 스택</a> &nbsp;|&nbsp;
 <a href="#.env-파일-설정"> .env 파일 설정 </a> &nbsp;|&nbsp;
 <a href="#swagger-api-문서">Swagger</a> &nbsp;|&nbsp;
+<a href="#모니터링--운영-대시보드">모니터링</a> &nbsp;|&nbsp;
 <a href="#시스템-아키텍처">아키텍처</a> &nbsp;|&nbsp;
 <a href="#데이터베이스-설계">ERD</a> &nbsp;|&nbsp;
 <a href="#서비스-도메인">도메인</a>
@@ -193,7 +194,7 @@ PORTONE_SECRET=your_portone_api_secret
 <details>
 <summary>Swagger API 문서 상세 보기</summary>
 
-<a href="https://api.fileinnout.kro.kr/swagger-ui/index.html" target="_blank"> 🚀 Swagger API 명세서 (Live)</a>
+<a href="https://swagger.fileinnout.com/api/swagger-ui/index.html" target="_blank"> 🚀 Swagger API 명세서 (Live)</a>
 <p>백엔드 API 명세와 테스트는 Swagger UI에서 확인할 수 있습니다.</p>
 </details>
 
@@ -217,12 +218,56 @@ PORTONE_SECRET=your_portone_api_secret
 
 <hr/>
 
-<h2 id="서비스-도메인">서비스 도메인</h2>
-<div align="left">
-<a href="https://www.fileinnout.kro.kr" target="_blank" rel="noopener noreferrer">
-<p>www.fileinnout.kro.kr</p>
-</a>
+<h2 id="모니터링--운영-대시보드">모니터링 & 운영 대시보드</h2>
+
+<p>k3s 클러스터 위에서 운영 중인 옵저버빌리티 / 운영 도구 대시보드입니다. 관측 UI는 익명 read-only로 공개되어 있습니다.</p>
+
+<div align="center">
+<a href="https://grafana.fileinnout.com/d/rYdddlPWk/node-exporter-full?orgId=1&from=now-5m&to=now&timezone=browser&var-ds_prometheus=PBFA97CFB590B2093&var-job=kubernetes-service-endpoints&var-nodename=instance20260526051902&var-node=10.0.0.164:9100&refresh=1m" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/Grafana-F46800?style=for-the-badge&logo=grafana&logoColor=white" alt="Grafana"/></a>
+<a href="https://prometheus.fileinnout.com/targets" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/Prometheus-E6522C?style=for-the-badge&logo=prometheus&logoColor=white" alt="Prometheus"/></a>
+<a href="https://jaeger.fileinnout.com/search?end=1781757710987000&limit=20&lookback=1h&maxDuration&minDuration&service=jaeger-all-in-one&start=1781754110987000" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/Jaeger-66CFE3?style=for-the-badge&logo=jaeger&logoColor=black" alt="Jaeger"/></a>
+<a href="https://kiali.fileinnout.com/kiali/console/mesh?duration=300&refresh=60000&meshLayout=dagre" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/Kiali-466BB0?style=for-the-badge&logo=istio&logoColor=white" alt="Kiali"/></a>
+<a href="https://dashboard.fileinnout.com" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/Kubernetes_Dashboard-326CE5?style=for-the-badge&logo=kubernetes&logoColor=white" alt="Kubernetes Dashboard"/></a>
+<a href="https://swagger.fileinnout.com/" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/Swagger-85EA2D?style=for-the-badge&logo=swagger&logoColor=black" alt="Swagger"/></a>
 </div>
+
+<hr/>
+
+<h2 id="서비스-도메인">서비스 도메인 / 배포 서버</h2>
+
+<p>OCI 단일 노드(k3s) 위에서 ingress-nginx로 라우팅되는 배포 서버 목록입니다. (TLS 인증서: <code>*.fileinnout.com</code>)</p>
+
+<table>
+<thead>
+<tr>
+<th>DNS</th>
+<th>역할</th>
+<th>스택 / 비고</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="https://lumisia.fileinnout.com" target="_blank" rel="noopener noreferrer">lumisia.fileinnout.com</a></td>
+<td>프론트엔드 진입점 — SPA 서빙 + 실시간 트래픽 라우팅</td>
+<td>Vue 3 / Vite · <code>/api</code>→백엔드, <code>/api/ws-stomp·/api/sse·/wss·/edit</code>→WebSocket(Yjs)</td>
+</tr>
+<tr>
+<td><a href="https://api.fileinnout.com" target="_blank" rel="noopener noreferrer">api.fileinnout.com</a></td>
+<td>백엔드 REST API 서버</td>
+<td>Spring Boot · JWT 인증 · <code>/api</code> 컨텍스트</td>
+</tr>
+<tr>
+<td><a href="https://minio.fileinnout.com" target="_blank" rel="noopener noreferrer">minio.fileinnout.com</a></td>
+<td>객체 스토리지 (S3 호환)</td>
+<td>MinIO · cloud/workspace 버킷 · presigned URL 업·다운로드</td>
+</tr>
+<tr>
+<td><a href="https://jenkins.fileinnout.com" target="_blank" rel="noopener noreferrer">jenkins.fileinnout.com</a></td>
+<td>CI/CD 파이프라인</td>
+<td>Jenkins · GitHub 웹훅 트리거만 공개(UI 비공개, cloudflared 터널)</td>
+</tr>
+</tbody>
+</table>
 
 <hr/>
 
