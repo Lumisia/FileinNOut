@@ -60,6 +60,9 @@ public class SecurityConfig {
         // SecurityConfig.java 내 인가 설정 수정
         http.authorizeHttpRequests(auth -> auth
                 .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                // Actuator health/prometheus는 클러스터 내부 Prometheus 스크랩 대상이라 인증 없이 허용
+                // (노출 엔드포인트는 application.yml management.endpoints.web.exposure에서 health,prometheus로 제한)
+                .requestMatchers("/actuator/**").permitAll()
                 .requestMatchers("/administrator/**").hasAuthority("ROLE_ADMIN")
                 .requestMatchers("/workspace/*/versions", "/workspace/*/versions/**").authenticated()
                 .requestMatchers("/user/**", "/workspace/**", "/login", "/error", "/file/**", "/auth/reissue", "/auth/logout", "/ws-stomp/**", "/notification/subscribe", "/sse/**", "/test/**").permitAll()
