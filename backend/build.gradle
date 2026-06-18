@@ -46,6 +46,8 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
 	implementation 'io.micrometer:micrometer-tracing-bridge-otel'
 	implementation 'io.opentelemetry:opentelemetry-exporter-otlp'
+	// /actuator/prometheus 엔드포인트 등록용. 없으면 엔드포인트가 안 생겨 404/500.
+	implementation 'io.micrometer:micrometer-registry-prometheus'
 
 	// Notification
 	implementation 'nl.martijndwars:web-push:5.1.1'
