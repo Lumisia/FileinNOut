@@ -64,6 +64,8 @@ kind: Ingress
 metadata:
   name: prometheus
   namespace: observability
+  annotations:
+    nginx.ingress.kubernetes.io/app-root: "/targets"
 spec:
   ingressClassName: nginx
   rules:

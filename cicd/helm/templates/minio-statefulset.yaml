@@ -34,6 +34,11 @@ spec:
       app.kubernetes.io/part-of: wafflebear
   template:
     metadata:
+      annotations:
+        # 자격증명(MINIO_NAME/SECRET)이 Secret에 있으므로, Secret이 바뀌면 MinIO도
+        # 재시작되어 새 root 자격증명을 읽어야 한다. (없으면 backend만 롤링되고 MinIO는
+        # 옛 자격증명으로 남아 presigned 서명 불일치/403이 난다.)
+        checksum/backend-secret: {{ include (print $.Template.BasePath "/backend-secret.yaml") . | sha256sum }}
       labels:
         app.kubernetes.io/name: minio
         app.kubernetes.io/part-of: wafflebear

@@ -25,6 +25,11 @@ spec:
       app: mariadb-stateful
   template:
     metadata:
+      annotations:
+        # DB_ID/DB_PASS가 Secret에 있으므로, Secret이 바뀌면 MariaDB도 재시작되어야
+        # 새 자격증명을 읽는다. (bootstrap Job이 user 비밀번호를 재동기화하지만, root
+        # 비밀번호는 재시작으로만 갱신된다.)
+        checksum/backend-secret: {{ include (print $.Template.BasePath "/backend-secret.yaml") . | sha256sum }}
       labels:
         app: mariadb-stateful
     spec:

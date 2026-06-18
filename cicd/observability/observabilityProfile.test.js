@@ -22,6 +22,10 @@ test('observability profile contains lightweight Prometheus settings', () => {
   assert.match(values, /requests:[\s\S]*cpu:\s*"200m"[\s\S]*memory:\s*"512Mi"/)
   assert.doesNotMatch(values, /serverFiles:/)
   assert.doesNotMatch(values, /job_name:\s*prometheus/)
+  // 공개 무인증 엔드포인트라 /-/quit·/-/reload(lifecycle)와 reload 사이드카는 비활성.
+  // 차트가 web.enable-lifecycle를 extraFlags 기본값으로 주입하므로 빈 배열로 제거한다.
+  assert.match(values, /extraFlags:\s*\[\]/)
+  assert.match(values, /configmapReload:[\s\S]*prometheus:[\s\S]*enabled:\s*false/)
 })
 
 test('Kiali operator values point at Prometheus and Jaeger with small resources', () => {
@@ -76,17 +80,20 @@ test('public portfolio ingress also exposes Grafana, Prometheus, and the Dashboa
   assert.match(ingress, /name:\s*grafana/)
   assert.match(ingress, /name:\s*prometheus-server/)
   assert.match(ingress, /name:\s*kubernetes-dashboard/)
+  // Prometheus should show target health first, not an empty query form.
+  assert.match(ingress, /name:\s*prometheus[\s\S]*app-root:\s*"?\/targets"?/)
   // Dashboard serves HTTPS on its service port, so nginx must speak HTTPS upstream.
   assert.match(ingress, /backend-protocol:\s*"?HTTPS"?/)
 })
 
-test('Grafana values stay light and serve anonymous read-only over Prometheus', () => {
+test('Grafana values stay light and expose read-only dashboards to anonymous visitors', () => {
   assert.equal(fileExists('cicd/observability/values-grafana-k3s.yaml'), true)
 
   const values = readRepoFile('cicd/observability/values-grafana-k3s.yaml')
-  // 익명 방문자는 Viewer(읽기 전용)
+  assert.match(values, /auth:[\s\S]*disable_login_form:\s*false/)
+  // 포트폴리오 방문자가 로그인 없이 대시보드를 읽도록 익명 Viewer 허용. 편집/관리는 불가.
   assert.match(values, /auth\.anonymous:[\s\S]*enabled:\s*true/)
-  assert.match(values, /org_role:\s*Viewer/)
+  assert.match(values, /auth\.anonymous:[\s\S]*org_role:\s*Viewer/)
   assert.match(values, /allow_sign_up:\s*false/)
   // 기존 Prometheus/Jaeger 데이터소스 재사용
   assert.match(values, /url:\s*http:\/\/prometheus-server\.observability\.svc\.cluster\.local/)
@@ -103,6 +110,9 @@ test('Kubernetes Dashboard RBAC grants read-only view without secrets', () => {
 
   const rbac = readRepoFile('cicd/observability/dashboard-readonly-rbac.yaml')
   assert.match(rbac, /kind:\s*ServiceAccount[\s\S]*name:\s*dashboard-viewer/)
+  assert.match(rbac, /kind:\s*Secret[\s\S]*name:\s*dashboard-viewer-token/)
+  assert.match(rbac, /type:\s*kubernetes\.io\/service-account-token/)
+  assert.match(rbac, /kubernetes\.io\/service-account\.name:\s*dashboard-viewer/)
   assert.match(rbac, /kind:\s*ClusterRoleBinding/)
   // 내장 view 롤(Secret 제외)에 바인딩
   assert.match(rbac, /kind:\s*ClusterRole\s*\n\s*name:\s*view/)
@@ -124,7 +134,7 @@ test('Istio telemetry manifest and docs wire traces to Jaeger without sidecar mo
   assert.match(readme, /values\.cni\.cniConfDir=\/var\/lib\/rancher\/k3s\/agent\/etc\/cni\/net\.d/)
   assert.match(readme, /extensionProviders\[0\]\.opentelemetry\.service=jaeger-collector\.observability\.svc\.cluster\.local/)
   assert.match(readme, /kubectl label namespace fileinnout istio\.io\/dataplane-mode=ambient --overwrite/)
-  assert.match(readme, /intentionally public for this portfolio deployment/)
+  assert.match(readme, /intentionally\s+public for this portfolio deployment/)
 })
 
 test('visitor access docs keep Jenkins private and observability UIs read-only', () => {
@@ -149,11 +159,13 @@ test('visitor access docs keep Jenkins private and observability UIs read-only',
   assert.match(combined, /do not expose[\s\S]*jaeger-collector/)
   assert.match(readme, /kiali\.fileinnout\.com/)
   assert.match(readme, /jaeger\.fileinnout\.com/)
-  // Grafana / Prometheus / Dashboard visitor read-only docs
+  // Grafana / Prometheus / Dashboard portfolio access docs
   assert.match(readme, /grafana\.fileinnout\.com/)
   assert.match(readme, /prometheus\.fileinnout\.com/)
   assert.match(readme, /dashboard\.fileinnout\.com/)
-  assert.match(readme, /anonymous[\s\S]*Viewer/)
+  assert.match(readme, /Grafana[\s\S]*admin/)
   assert.match(readme, /Prometheus[\s\S]*no user\/role model/)
+  assert.match(readme, /\/targets/)
+  assert.match(readme, /dashboard-viewer-token/)
   assert.match(readme, /view.*ClusterRole|ClusterRole[\s\S]*view/)
 })

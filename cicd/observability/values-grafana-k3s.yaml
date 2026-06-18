@@ -1,13 +1,24 @@
 # grafana/grafana values for OCI single-node k3s.
-# Grafana is public for the portfolio, but visitors get anonymous read-only
-# (Viewer). It reads the Prometheus that is already running, so it adds no new
-# scrape load.
+# Grafana is public read-only: anonymous visitors get the Viewer role so portfolio
+# reviewers see dashboards without an account. The built-in admin login stays
+# enabled for curating dashboards.
 
 # 관리자 비밀번호는 차트가 무작위로 생성해 Secret에 저장한다(평문 금지).
 #   kubectl -n observability get secret grafana -o jsonpath="{.data.admin-password}" | base64 -d
 # 로 확인한다. adminPassword를 여기에 적지 말 것.
 
 replicas: 1
+
+# 단일 레플리카 + RWO(local-path) PVC라 롤링업데이트 시 새 pod가 같은 PVC/sqlite를
+# 동시에 열어 충돌한다. 옛 pod를 먼저 내리는 Recreate로 교체한다.
+deploymentStrategy:
+  type: Recreate
+
+# init-chown-data(busybox chown)는 DAC_OVERRIDE를 떨군 채 실행돼, 운영 중 grafana(472)가
+# 만든 csv/pdf/png 디렉터리에서 "Permission denied"로 죽는다. 데이터는 이미 472 소유이고
+# fsGroup이 마운트 시 소유권을 맞추므로 이 initContainer를 끈다.
+initChownData:
+  enabled: false
 
 resources:
   requests:
@@ -36,9 +47,10 @@ grafana.ini:
     check_for_updates: false
   users:
     allow_sign_up: false
+  auth:
+    disable_login_form: false
   auth.anonymous:
     enabled: true
-    org_name: "Main Org."
     org_role: Viewer
     hide_version: true
 
