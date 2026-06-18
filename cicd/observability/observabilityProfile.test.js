@@ -23,7 +23,8 @@ test('observability profile contains lightweight Prometheus settings', () => {
   assert.doesNotMatch(values, /serverFiles:/)
   assert.doesNotMatch(values, /job_name:\s*prometheus/)
   // 공개 무인증 엔드포인트라 /-/quit·/-/reload(lifecycle)와 reload 사이드카는 비활성.
-  assert.match(values, /enableLifecycle:\s*false/)
+  // 차트가 web.enable-lifecycle를 extraFlags 기본값으로 주입하므로 빈 배열로 제거한다.
+  assert.match(values, /extraFlags:\s*\[\]/)
   assert.match(values, /configmapReload:[\s\S]*prometheus:[\s\S]*enabled:\s*false/)
 })
 
