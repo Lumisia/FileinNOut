@@ -9,6 +9,17 @@
 
 replicas: 1
 
+# 단일 레플리카 + RWO(local-path) PVC라 롤링업데이트 시 새 pod가 같은 PVC/sqlite를
+# 동시에 열어 충돌한다. 옛 pod를 먼저 내리는 Recreate로 교체한다.
+deploymentStrategy:
+  type: Recreate
+
+# init-chown-data(busybox chown)는 DAC_OVERRIDE를 떨군 채 실행돼, 운영 중 grafana(472)가
+# 만든 csv/pdf/png 디렉터리에서 "Permission denied"로 죽는다. 데이터는 이미 472 소유이고
+# fsGroup이 마운트 시 소유권을 맞추므로 이 initContainer를 끈다.
+initChownData:
+  enabled: false
+
 resources:
   requests:
     cpu: "100m"
