@@ -3,6 +3,7 @@ package com.example.WaffleBear.workspace.service;
 import com.example.WaffleBear.common.exception.BaseException;
 import com.example.WaffleBear.common.model.BaseResponseStatus;
 import com.example.WaffleBear.config.sse.SseService;
+import com.example.WaffleBear.demo.DemoAccessPolicy;
 import com.example.WaffleBear.email.EmailVerify;
 import com.example.WaffleBear.email.EmailVerifyRepository;
 import com.example.WaffleBear.email.EmailVerifyService;
@@ -49,18 +50,29 @@ public class PostService {
     private final NotificationService ns;
     private final WorkspaceAssetService workspaceAssetService;
     private final PostVersionService postVersionService;
+    private final DemoAccessPolicy demoAccessPolicy;
 
     // ─────────────────────────────────────────────────────────────────────────
     // 저장 / 수정
     // ─────────────────────────────────────────────────────────────────────────
 
     @Transactional
-    public PostDto.ResPost save(PostDto.ReqPost dto, User user) {
+    public PostDto.ResPost save(PostDto.ReqPost dto, AuthUserDetails authUser) {
+        User user = ur.findByEmail(authUser.getEmail())
+                .orElseThrow(() -> new BaseException(USER_NOT_FOUND));
+
         Post result;
 
         if (dto.idx() != null) {
             result = pr.findById(dto.idx())
                     .orElseThrow(() -> new BaseException(WORKSPACE_NOT_FOUND));
+
+            UserPost writerAccess = upr.findByUser_IdxAndWorkspace_Idx(user.getIdx(), result.getIdx())
+                    .orElseThrow(() -> new BaseException(WORKSPACE_ACCESS_DENIED));
+            if (writerAccess.getLevel() == AccessRole.READ) {
+                throw new BaseException(WORKSPACE_ACCESS_DENIED);
+            }
+
             result.update(dto.title(), dto.contents());
             pr.save(result);
         } else {
@@ -122,6 +134,7 @@ public class PostService {
         }
 
         if (workspace.getStatus() == isShare.Public) {
+            demoAccessPolicy.assertWorkspaceMutable(workspace);
             User user = ur.findById(userIdx)
                     .orElseThrow(() -> new BaseException(USER_NOT_FOUND));
 
@@ -146,6 +159,8 @@ public class PostService {
         UserPost result = upr.findByUser_IdxAndWorkspace_Idx(checkUser, postIdx)
                 .orElseThrow(() -> new BaseException(WORKSPACE_ACCESS_DENIED));
 
+        demoAccessPolicy.assertWorkspaceMutable(result.getWorkspace());
+
         if (result.getLevel().equals(AccessRole.ADMIN)) {
             Post workspace = result.getWorkspace();
             // post 를 참조하는 자식 행을 먼저 제거해야 FK 제약 위반(500) 없이 삭제된다.
@@ -165,6 +180,10 @@ public class PostService {
 
     @Transactional
     public BaseResponseStatus list_delete(Long postIdx, Long checkUser) {
+        UserPost relation = upr.findByUser_IdxAndWorkspace_Idx(checkUser, postIdx)
+                .orElseThrow(() -> new BaseException(WORKSPACE_ACCESS_DENIED));
+        demoAccessPolicy.assertWorkspaceMutable(relation.getWorkspace());
+
         upr.deleteByUser_IdxAndWorkspace_Idx(checkUser, postIdx)
                 .orElseThrow(() -> new BaseException(WORKSPACE_ACCESS_DENIED));
 
@@ -178,6 +197,8 @@ public class PostService {
     public BaseResponseStatus invite(String uuid, String email, AuthUserDetails user) {
         Post post = pr.findByUUID(uuid)
                 .orElseThrow(() -> new BaseException(WORKSPACE_NOT_FOUND));
+
+        demoAccessPolicy.assertWorkspaceMutable(post);
 
         if (!post.getType()) {
             throw new BaseException(WORKSPACE_SHARE_NOT_ALLOWED);
@@ -233,7 +254,10 @@ public class PostService {
     // ─────────────────────────────────────────────────────────────────────────
 
     @Transactional
-    public BaseResponseStatus verifyEmail(User user, String uuid, String type) {
+    public BaseResponseStatus verifyEmail(AuthUserDetails authUser, String uuid, String type) {
+        User user = ur.findByEmail(authUser.getEmail())
+                .orElseThrow(() -> new BaseException(USER_NOT_FOUND));
+
         EmailVerify verificationToken = evr.findByToken(uuid)
                 .orElseThrow(() -> new BaseException(EMAIL_VERIFY_TOKEN_INVALID));
 
@@ -253,6 +277,8 @@ public class PostService {
 
         Post result = pr.findByUUID(uuid)
                 .orElseThrow(() -> new BaseException(WORKSPACE_SHARE_ENDED));
+
+        demoAccessPolicy.assertWorkspaceMutable(result);
 
         if (upr.findByUser_IdxAndWorkspace_Idx(user.getIdx(), result.getIdx()).isPresent()) {
             evr.delete(verificationToken);
@@ -281,6 +307,8 @@ public class PostService {
     public BaseResponseStatus isShared(Long postIdx, Long checkUser, PostDto.ReqType dto) {
         UserPost result = upr.findByUser_IdxAndWorkspace_Idx(checkUser, postIdx)
                 .orElseThrow(() -> new BaseException(WORKSPACE_NOT_FOUND));
+
+        demoAccessPolicy.assertWorkspaceMutable(result.getWorkspace());
 
         result.getWorkspace().typeUpdate(dto.type(), dto.status());
         pr.save(result.getWorkspace());
@@ -314,6 +342,8 @@ public class PostService {
             throw new BaseException(ADMIN_ONLY_ACTION);
         }
 
+        demoAccessPolicy.assertWorkspaceMutable(adminPost.getWorkspace());
+
         // 2. 대상 유저 역할 변경
         UserPost targetPost = upr.findByUser_IdxAndWorkspace_Idx(targetUserIdx, postIdx)
                 .orElseThrow(() -> new BaseException(WORKSPACE_ACCESS_DENIED));
@@ -335,6 +365,8 @@ public class PostService {
         if (!adminPost.getLevel().equals(AccessRole.ADMIN)) {
             throw new BaseException(ADMIN_ONLY_ACTION);
         }
+
+        demoAccessPolicy.assertWorkspaceMutable(adminPost.getWorkspace());
 
         // 2. 관계 삭제
         upr.deleteByUser_IdxAndWorkspace_Idx(targetUserIdx, postIdx)
@@ -359,6 +391,8 @@ public class PostService {
         if (!result.getLevel().equals(AccessRole.ADMIN)) {
             throw new BaseException(ADMIN_ONLY_ACTION);
         }
+
+        demoAccessPolicy.assertWorkspaceMutable(result.getWorkspace());
 
         List<Long> userList = new ArrayList<>(role.keySet());
 
@@ -388,6 +422,7 @@ public class PostService {
         }
 
         Post workspace = ownerRelation.getWorkspace();
+        demoAccessPolicy.assertWorkspaceMutable(workspace);
         if (!Boolean.TRUE.equals(workspace.getType())) {
             throw new BaseException(WORKSPACE_SHARE_NOT_ALLOWED);
         }

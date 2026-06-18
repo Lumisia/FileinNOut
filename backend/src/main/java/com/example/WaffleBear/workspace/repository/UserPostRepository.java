@@ -10,6 +10,8 @@ import java.util.List;
 import java.util.Optional;
 
 public interface UserPostRepository extends JpaRepository<UserPost, Long> {
+    Optional<UserPost> findByUserAndWorkspace(User user, com.example.WaffleBear.workspace.model.post.Post workspace);
+
     @Query("SELECT up FROM UserPost up JOIN FETCH up.workspace WHERE up.user.idx = :userId AND up.workspace.idx = :workspaceId")
     Optional<UserPost> findByUser_IdxAndWorkspace_Idx(@Param("userId") Long userId, @Param("workspaceId") Long workspaceId);
 
