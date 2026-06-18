@@ -16,7 +16,6 @@ import java.util.List;
 @RequestMapping("/chatRoom")
 public class ChatRoomController {
     private final ChatRoomService chatRoomService;
-    private final ParticipantsRepository participantsRepository;
 
     @PostMapping("/create")
     public ResponseEntity<Long> createRoom(

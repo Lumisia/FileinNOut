@@ -63,7 +63,9 @@ public enum BaseResponseStatus {
     DUPLICATE_RELATIONSHIP(false, 6039, "이미 연결된 사용자입니다."),
     GROUP_NAME_DUPLICATED(false, 6040, "같은 이름의 그룹이 이미 존재합니다."),
     GROUP_ACCESS_DENIED(false, 6041, "그룹 접근 권한이 없습니다."),
-    RELATIONSHIP_REQUIRED(false, 6042, "관계가 형성된 사용자만 그룹에 추가할 수 있습니다.");
+    RELATIONSHIP_REQUIRED(false, 6042, "관계가 형성된 사용자만 그룹에 추가할 수 있습니다."),
+
+    DEMO_PROTECTED_ACTION(false, 6050, "데모 환경에서는 이 작업을 변경할 수 없습니다.");
 
     private final boolean success;
     private final int code;
