@@ -247,24 +247,34 @@ PORTONE_SECRET=your_portone_api_secret
 </thead>
 <tbody>
 <tr>
-<td><a href="https://lumisia.fileinnout.com" target="_blank" rel="noopener noreferrer">lumisia.fileinnout.com</a></td>
-<td>프론트엔드 진입점 — SPA 서빙 + 실시간 트래픽 라우팅</td>
-<td>Vue 3 / Vite · <code>/api</code>→백엔드, <code>/api/ws-stomp·/api/sse·/wss·/edit</code>→WebSocket(Yjs)</td>
+<td><a href="https://grafana.fileinnout.com" target="_blank" rel="noopener noreferrer">grafana.fileinnout.com</a></td>
+<td>메트릭 시각화 대시보드</td>
+<td>Grafana · Node Exporter Full 등 · 익명 Viewer 공개</td>
 </tr>
 <tr>
-<td><a href="https://api.fileinnout.com" target="_blank" rel="noopener noreferrer">api.fileinnout.com</a></td>
-<td>백엔드 REST API 서버</td>
-<td>Spring Boot · JWT 인증 · <code>/api</code> 컨텍스트</td>
+<td><a href="https://prometheus.fileinnout.com" target="_blank" rel="noopener noreferrer">prometheus.fileinnout.com</a></td>
+<td>메트릭 수집 / 쿼리</td>
+<td>Prometheus · PromQL · <code>/targets</code> 스크랩 상태</td>
 </tr>
 <tr>
-<td><a href="https://minio.fileinnout.com" target="_blank" rel="noopener noreferrer">minio.fileinnout.com</a></td>
-<td>객체 스토리지 (S3 호환)</td>
-<td>MinIO · cloud/workspace 버킷 · presigned URL 업·다운로드</td>
+<td><a href="https://jaeger.fileinnout.com" target="_blank" rel="noopener noreferrer">jaeger.fileinnout.com</a></td>
+<td>분산 트레이싱</td>
+<td>Jaeger all-in-one · Istio 텔레메트리 추적</td>
 </tr>
 <tr>
-<td><a href="https://jenkins.fileinnout.com" target="_blank" rel="noopener noreferrer">jenkins.fileinnout.com</a></td>
-<td>CI/CD 파이프라인</td>
-<td>Jenkins · GitHub 웹훅 트리거만 공개(UI 비공개, cloudflared 터널)</td>
+<td><a href="https://kiali.fileinnout.com/kiali" target="_blank" rel="noopener noreferrer">kiali.fileinnout.com</a></td>
+<td>서비스 메시 관측</td>
+<td>Kiali · Istio mesh 토폴로지 · anonymous view-only</td>
+</tr>
+<tr>
+<td><a href="https://dashboard.fileinnout.com" target="_blank" rel="noopener noreferrer">dashboard.fileinnout.com</a></td>
+<td>쿠버네티스 클러스터 관리 UI</td>
+<td>Kubernetes Dashboard · k3s 워크로드/리소스 조회</td>
+</tr>
+<tr>
+<td><a href="https://swagger.fileinnout.com/" target="_blank" rel="noopener noreferrer">swagger.fileinnout.com</a></td>
+<td>API 명세 / 테스트</td>
+<td>springdoc Swagger UI · 백엔드 OpenAPI 문서</td>
 </tr>
 </tbody>
 </table>
