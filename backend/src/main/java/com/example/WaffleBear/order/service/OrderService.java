@@ -2,6 +2,7 @@ package com.example.WaffleBear.order.service;
 
 import com.example.WaffleBear.common.exception.BaseException;
 import com.example.WaffleBear.common.model.BaseResponseStatus;
+import com.example.WaffleBear.demo.DemoAccessPolicy;
 import com.example.WaffleBear.file.service.StoragePlanService;
 import com.example.WaffleBear.order.model.Order;
 import com.example.WaffleBear.order.model.dto.OrderDto;
@@ -25,12 +26,15 @@ public class OrderService {
     private final UserRepository userRepository;
     private final ObjectProvider<PaymentClient> paymentClientProvider;
     private final StoragePlanService storagePlanService;
+    private final DemoAccessPolicy demoAccessPolicy;
 
     @Transactional
     public OrderDto.OrderResponse createOrder(String email, OrderDto.OrderRequest requestDto) {
         if (requestDto == null || requestDto.productCode() == null || requestDto.productCode().isBlank()) {
             throw BaseException.from(BaseResponseStatus.REQUEST_ERROR);
         }
+
+        demoAccessPolicy.assertOrderAllowed(email);
 
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> BaseException.from(BaseResponseStatus.FAIL));
@@ -77,6 +81,8 @@ public class OrderService {
         if (requestDto == null || requestDto.orderId() == null || requestDto.orderId().isBlank() || requestDto.paymentId() == null || requestDto.paymentId().isBlank()) {
             throw BaseException.from(BaseResponseStatus.REQUEST_ERROR);
         }
+
+        demoAccessPolicy.assertOrderAllowed(email);
 
         Order order = orderRepository.findByOrderId(requestDto.orderId())
                 .orElseThrow(() -> new BaseException(BaseResponseStatus.FAIL));
