@@ -21,6 +21,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Configuration
@@ -29,6 +30,10 @@ import java.util.List;
 public class SecurityConfig {
     @Value("${app.frontend-url}")
     private String frontendUrl;
+
+    // 프론트 외 추가 허용 origin(콤마 구분). 별도 서브도메인 Swagger UI 등.
+    @Value("${app.extra-cors-origins:}")
+    private String extraCorsOrigins;
 
     private final AuthenticationConfiguration configuration;
     private final LoginFilter loginFilter;
@@ -79,7 +84,8 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowCredentials(true);
-        configuration.setAllowedOriginPatterns(List.of(
+
+        List<String> originPatterns = new ArrayList<>(List.of(
                 frontendUrl,
                 "http://localhost:*",
                 "http://127.0.0.1:*",
@@ -87,6 +93,16 @@ public class SecurityConfig {
                 "http://10.*:*",
                 "http://172.*:*"
         ));
+        // app.extra-cors-origins(콤마 구분)에 지정된 origin 추가 (예: Swagger UI 서브도메인)
+        if (extraCorsOrigins != null && !extraCorsOrigins.isBlank()) {
+            for (String origin : extraCorsOrigins.split(",")) {
+                String trimmed = origin.trim();
+                if (!trimmed.isEmpty()) {
+                    originPatterns.add(trimmed);
+                }
+            }
+        }
+        configuration.setAllowedOriginPatterns(originPatterns);
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
 
