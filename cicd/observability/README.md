@@ -12,7 +12,7 @@ metrics, topology, and tracing while keeping the node stable.
 |---|---|---|
 | Istio ambient | Mesh traffic capture without per-pod sidecars | internal |
 | Prometheus | Metrics backend for Kiali, Grafana, and Istio metrics | public status/query UI |
-| Grafana | Dashboards over Prometheus/Jaeger | admin-login dashboard curation |
+| Grafana | Dashboards over Prometheus/Jaeger | public read-only (anonymous Viewer) + admin curation |
 | Kiali | Mesh graph and service health UI | public read-only domain |
 | Jaeger all-in-one | Request tracing demo | public query UI |
 | Kubernetes Dashboard | Cluster/workload viewer | public read-only (view RBAC) |
@@ -21,9 +21,9 @@ Kiali, Jaeger, Prometheus, and the Kubernetes Dashboard are intentionally
 public for this portfolio deployment. Kiali uses
 `deployment.view_only_mode: true`, Prometheus exposes status/query pages with
 admin and lifecycle APIs disabled by default, and the Kubernetes Dashboard is
-bound to the built-in `view` ClusterRole. Grafana requires the generated admin
-login so the operator can curate dashboards before showing them. Jenkins must
-remain private and must not be directly public.
+bound to the built-in `view` ClusterRole. Grafana shows dashboards read-only to
+anonymous visitors (Viewer role), and the generated admin login is for curating
+dashboards. Jenkins must remain private and must not be directly public.
 
 ## Install Order
 
