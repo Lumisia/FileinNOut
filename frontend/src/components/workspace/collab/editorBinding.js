@@ -9,7 +9,7 @@
 
 import * as Y from 'yjs'
 import { diffBlocks } from './reconcile.js'
-import { yArrayToBlocks, applyOpsToYArray } from './yblocks.js'
+import { yArrayToBlocks, applyOpsToYArray, reconcileYArray } from './yblocks.js'
 
 export const LOCAL_ORIGIN = Symbol('local-block-edit')
 
@@ -114,11 +114,23 @@ export function createBlockBinding({ editor, ydoc, getSavedBlocks }) {
     }
   }
 
+  async function replaceAll(nextBlocks = []) {
+    const normalizedBlocks = Array.isArray(nextBlocks) ? nextBlocks : []
+    applyingRemote = true
+    try {
+      await editor.render({ blocks: normalizedBlocks })
+      reconcileYArray(Y, yBlocks, normalizedBlocks, LOCAL_ORIGIN)
+      setBaseline(normalizedBlocks)
+    } finally {
+      applyingRemote = false
+    }
+  }
+
   const isApplyingRemote = () => applyingRemote
   function dispose() {
     disposed = true
     yBlocks.unobserveDeep(observer)
   }
 
-  return { pushLocal, applyRemote, seed, dispose, isApplyingRemote, yBlocks }
+  return { pushLocal, applyRemote, seed, replaceAll, dispose, isApplyingRemote, yBlocks }
 }

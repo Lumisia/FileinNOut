@@ -13,6 +13,8 @@ import SockJS from 'sockjs-client'
 import Stomp from 'stompjs'
 import { apiPath } from '@/utils/backendUrl'
 import { fetchPostVersions, fetchPostVersion } from '@/api/versionsApi'
+import WorkspaceVersionSnapshot from '@/components/workspace/WorkspaceVersionSnapshot.vue'
+import { hydrateVersionImageUrls, parseVersionSnapshot } from '@/utils/workspaceVersion'
 
 const route     = useRoute()
 const router    = useRouter()
@@ -297,6 +299,13 @@ useFocusTrap(() => versionPanelOpen.value, versionPanelRef, { onEsc: () => close
 const versionDiffOpen    = ref(false)
 const versionDiffLoading = ref(false)
 const versionDiffData    = ref(null)  // { current, prev }
+const versionRestoreLoading = ref(false)
+
+const versionAssetUrlById = computed(() => new Map(
+  workspaceAssets.value
+    .filter((asset) => asset.id != null && asset.previewUrl)
+    .map((asset) => [String(asset.id), asset.previewUrl]),
+))
 
 const formatVersionDate = (val) => {
   if (!val) return ''
@@ -383,7 +392,7 @@ const editorJsonToLines = (jsonStr) => {
           ;(d.content || []).forEach((row) => lines.push(row.join(' | ')))
           break
         case 'image':
-          lines.push('[이미지: ' + (d.caption || d.file?.url || '') + ']')
+          lines.push('[이미지: ' + (d.caption || d.file?.assetIdx || d.file?.url || '') + ']')
           break
         case 'embed':
           lines.push('[임베드: ' + (d.source || '') + ']')
@@ -477,8 +486,49 @@ const previewVersion = async (versionNum) => {
 }
 
 const closeVersionDiff = () => {
+  if (versionRestoreLoading.value) return
   versionDiffOpen.value = false
   versionDiffData.value = null
+}
+
+const restoreSelectedVersion = async () => {
+  const selected = versionDiffData.value?.current
+  if (!selected || !editorApi.value?.restoreSnapshot || versionRestoreLoading.value || isSaving.value) return
+
+  const shouldRestore = await confirm({
+    title: `v${selected.versionNum} 내용으로 복구`,
+    message: '현재 내용을 선택한 버전으로 바꾸고 새 버전으로 저장합니다.',
+    confirmText: '복구하기',
+    cancelText: '취소',
+  })
+  if (!shouldRestore) return
+
+  versionRestoreLoading.value = true
+  isSaving.value = true
+  saveStatus.value = 'saving'
+  try {
+    const snapshot = parseVersionSnapshot(selected)
+    const blocks = hydrateVersionImageUrls(snapshot.blocks, versionAssetUrlById.value)
+    await editorApi.value.restoreSnapshot({ title: snapshot.title, blocks })
+    title.value = snapshot.title
+    titleDirty.value = true
+
+    await editorApi.value.savePost()
+    titleDirty.value = false
+    editorApi.value.markSaved?.()
+    saveStatus.value = 'saved'
+    lastSavedAt.value = Date.now()
+    await loadVersionList()
+    versionDiffOpen.value = false
+    versionDiffData.value = null
+    toast.success(`v${selected.versionNum} 내용으로 복구했습니다.`)
+  } catch (error) {
+    saveStatus.value = 'error'
+    toast.error(getVersionErrorMessage(error, '버전을 복구하지 못했습니다.'))
+  } finally {
+    versionRestoreLoading.value = false
+    isSaving.value = false
+  }
 }
 
 // ─── 저장 ─────────────────────────────────────────────────────────────────────
@@ -1100,9 +1150,28 @@ onBeforeUnmount(async () => {
                   </p>
                 </div>
               </div>
-              <button type="button" class="vdiff-close" @click="closeVersionDiff">
-                <i class="fa-solid fa-xmark"></i>
-              </button>
+              <div class="vdiff-header__actions">
+                <button
+                  v-if="versionDiffData"
+                  type="button"
+                  class="vdiff-restore"
+                  :disabled="versionRestoreLoading || isSaving"
+                  @click="restoreSelectedVersion"
+                >
+                  <i class="fa-solid fa-rotate-left"></i>
+                  {{ versionRestoreLoading ? '복구 중...' : '해당 내용 복구하기' }}
+                </button>
+                <button
+                  type="button"
+                  class="vdiff-close"
+                  :disabled="versionRestoreLoading"
+                  aria-label="버전 비교 닫기"
+                  title="닫기"
+                  @click="closeVersionDiff"
+                >
+                  <i class="fa-solid fa-xmark"></i>
+                </button>
+              </div>
             </div>
 
             <div v-if="!versionDiffLoading && versionDiffData" class="vdiff-stats">
@@ -1116,27 +1185,21 @@ onBeforeUnmount(async () => {
               <p>버전 데이터를 불러오는 중...</p>
             </div>
 
-            <div
-              v-else-if="versionDiffData && versionDiffStats.added === 0 && versionDiffStats.removed === 0"
-              class="vdiff-empty"
-            >
-              <i class="fa-solid fa-circle-check vdiff-empty__icon"></i>
-              <p>이전 버전과 내용 차이가 없습니다.</p>
-            </div>
-
-            <div v-else-if="versionDiffData" class="vdiff-body">
-              <div class="vdiff-viewer">
-                <div
-                  v-for="(line, idx) in versionDiffLines"
-                  :key="idx"
-                  :class="['vdiff-line', 'vdiff-line--' + line.type]"
-                >
-                  <span class="vdiff-line__gutter">
-                    <i v-if="line.type === 'add'" class="fa-solid fa-plus"></i>
-                    <i v-else-if="line.type === 'remove'" class="fa-solid fa-minus"></i>
-                  </span>
-                  <span class="vdiff-line__text" v-html="line.text || '&nbsp;'"></span>
-                </div>
+            <div v-else-if="versionDiffData" class="vdiff-comparison">
+              <div class="vdiff-comparison__pane">
+                <p class="vdiff-comparison__label">이전 버전</p>
+                <WorkspaceVersionSnapshot
+                  :version="versionDiffData.prev"
+                  :asset-url-by-id="versionAssetUrlById"
+                  empty-label="이전 버전이 없습니다."
+                />
+              </div>
+              <div class="vdiff-comparison__pane vdiff-comparison__pane--current">
+                <p class="vdiff-comparison__label">변경된 버전</p>
+                <WorkspaceVersionSnapshot
+                  :version="versionDiffData.current"
+                  :asset-url-by-id="versionAssetUrlById"
+                />
               </div>
             </div>
           </div>
@@ -2340,10 +2403,11 @@ html.dark .version-preview__content { background: #2d2d2d; }
 
 .vdiff-modal {
   width: 100%;
-  max-width: 780px;
-  max-height: 90vh;
+  max-width: 1180px;
+  height: min(820px, calc(100vh - 48px));
+  max-height: 92vh;
   background: #ffffff;
-  border-radius: 20px;
+  border-radius: 8px;
   box-shadow: 0 32px 80px rgba(15, 23, 42, 0.3);
   display: flex;
   flex-direction: column;
@@ -2405,6 +2469,33 @@ html.dark .vdiff-header__title { color: #f1f5f9; }
   color: #9ca3af;
   margin: 0;
 }
+
+.vdiff-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.vdiff-restore {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 12px;
+  border: 1px solid #c7d2fe;
+  border-radius: 7px;
+  background: #eef2ff;
+  color: #4338ca;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.vdiff-restore:hover:not(:disabled) { background: #e0e7ff; border-color: #a5b4fc; }
+.vdiff-restore:disabled, .vdiff-close:disabled { cursor: wait; opacity: 0.58; }
+html.dark .vdiff-restore { border-color: #4338ca; background: rgba(99, 102, 241, 0.16); color: #c7d2fe; }
 
 .vdiff-close {
   display: flex;
@@ -2473,90 +2564,49 @@ html.dark .vdiff-stats { background: #181824; border-bottom-color: #2d2d3d; }
 }
 @keyframes vdiff-spin { to { transform: rotate(360deg); } }
 
-/* 변경 없음 */
-.vdiff-empty {
+/* 버전 나란히 비교 */
+.vdiff-comparison {
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 60px 20px;
-  color: #6b7280;
-  font-size: 14px;
-  text-align: center;
-}
-.vdiff-empty__icon { font-size: 40px; color: #22c55e; }
-
-/* Diff 뷰어 */
-.vdiff-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 12px 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
 }
 
-.vdiff-viewer {
-  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace;
-  font-size: 13.5px;
-  line-height: 1.65;
+.vdiff-comparison__pane {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-right: 1px solid #e5e7eb;
 }
 
-.vdiff-line {
-  display: flex;
-  align-items: flex-start;
-  gap: 0;
-  padding: 1px 0;
-  transition: background 0.1s;
-}
+.vdiff-comparison__pane--current { border-right: 0; }
 
-.vdiff-line--add {
-  background: rgba(22, 163, 74, 0.08);
-}
-.vdiff-line--add:hover {
-  background: rgba(22, 163, 74, 0.14);
-}
-
-.vdiff-line--remove {
-  background: rgba(220, 38, 38, 0.08);
-}
-.vdiff-line--remove:hover {
-  background: rgba(220, 38, 38, 0.14);
-}
-
-.vdiff-line--equal {
-  background: transparent;
-}
-
-.vdiff-line__gutter {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  flex-shrink: 0;
-  padding: 0 8px;
+.vdiff-comparison__label {
+  position: absolute;
+  top: 16px;
+  right: 18px;
+  z-index: 2;
+  margin: 0;
+  color: #64748b;
   font-size: 11px;
   font-weight: 700;
 }
-.vdiff-line--add    .vdiff-line__gutter { color: #16a34a; }
-.vdiff-line--remove .vdiff-line__gutter { color: #dc2626; }
-.vdiff-line--equal  .vdiff-line__gutter { color: #d1d5db; }
 
-.vdiff-line__text {
-  flex: 1;
-  padding: 2px 16px 2px 0;
-  word-break: break-all;
-  white-space: pre-wrap;
-  color: #1f2937;
+html.dark .vdiff-comparison__pane { border-color: #2d2d3d; }
+
+@media (max-width: 760px) {
+  .vdiff-overlay { padding: 10px; }
+  .vdiff-modal { height: calc(100vh - 20px); max-height: none; }
+  .vdiff-header { align-items: center; padding: 16px; }
+  .vdiff-header__sub, .vdiff-stats { display: none; }
+  .vdiff-header__actions { align-self: flex-start; }
+  .vdiff-restore { max-width: 132px; min-height: 36px; line-height: 1.25; }
+  .vdiff-comparison { grid-template-columns: 1fr; overflow-y: auto; }
+  .vdiff-comparison__pane { min-height: 48vh; overflow: visible; border-right: 0; border-bottom: 1px solid #e5e7eb; }
+  .vdiff-comparison__pane--current { border-bottom: 0; }
+  .vdiff-comparison__pane .version-snapshot { height: auto; overflow: visible; }
 }
-html.dark .vdiff-line__text { color: #e5e7eb; }
-
-.vdiff-line--add    .vdiff-line__text { color: #166534; }
-.vdiff-line--remove .vdiff-line__text { color: #991b1b; text-decoration: line-through; opacity: 0.8; }
-
-html.dark .vdiff-line--add    .vdiff-line__text { color: #86efac; }
-html.dark .vdiff-line--remove .vdiff-line__text { color: #fca5a5; }
-
-html.dark .vdiff-line--add    { background: rgba(22, 163, 74, 0.12); }
-html.dark .vdiff-line--remove { background: rgba(220, 38, 38, 0.12); }
 </style>
 

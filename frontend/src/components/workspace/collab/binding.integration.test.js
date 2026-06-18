@@ -23,7 +23,14 @@ function makeFakeEditor(initial = []) {
       arr.splice(to, 0, m)
     },
   }
-  return { blocks, _arr: arr, save: async () => ({ blocks: arr.map((x) => ({ ...x })) }) }
+  return {
+    blocks,
+    _arr: arr,
+    save: async () => ({ blocks: arr.map((x) => ({ ...x })) }),
+    render: async ({ blocks: nextBlocks }) => {
+      arr.splice(0, arr.length, ...nextBlocks.map((x) => ({ ...x })))
+    },
+  }
 }
 
 const tick = () => new Promise((r) => setTimeout(r, 0))
@@ -74,6 +81,32 @@ function connect(d1, d2) {
     if (origin === LOCAL_ORIGIN) Y.applyUpdate(d1, u, 'remote')
   })
 }
+
+test('통합: 버전 복구는 로컬 에디터와 원격 참가자를 선택 스냅샷으로 교체한다', async () => {
+  const docA = new Y.Doc()
+  const docB = new Y.Doc()
+  connect(docA, docB)
+
+  const edA = makeFakeEditor([b('old', '현재 내용')])
+  const edB = makeFakeEditor()
+  const bindA = createBlockBinding({ editor: edA, ydoc: docA, getSavedBlocks: () => edA.save().then((d) => d.blocks) })
+  const bindB = createBlockBinding({ editor: edB, ydoc: docB, getSavedBlocks: () => edB.save().then((d) => d.blocks) })
+  const restored = [b('v2', '복구된 v2 내용')]
+
+  await bindA.seed(edA._arr)
+  await tick()
+  assert.equal(typeof bindA.replaceAll, 'function')
+
+  await bindA.replaceAll(restored)
+  await tick()
+  await tick()
+
+  assert.deepEqual(edA._arr, restored, '복구 실행자의 에디터 교체')
+  assert.deepEqual(edB._arr, restored, '원격 참가자에게 복구 내용 전파')
+
+  bindA.dispose()
+  bindB.dispose()
+})
 
 test('통합: 미-push 로컬 편집이 원격 적용 도착해도 살아남음 (Phase 1.5)', async () => {
   const docA = new Y.Doc()
