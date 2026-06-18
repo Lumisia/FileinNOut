@@ -33,6 +33,9 @@ app:
   # 프론트(lumisia.*)와 API(api.*)가 다른 서브도메인일 때 OAuth/refresh 쿠키를
   # 공유하려면 상위 도메인(예: .fileinnout.com)을 지정한다. 비우면 호스트 전용(localhost).
   cookie-domain: ${APP_COOKIE_DOMAIN:}
+  # 프론트(frontend-url) 외에 CORS를 허용할 추가 origin(콤마 구분).
+  # 예: 별도 서브도메인에서 호스팅되는 Swagger UI(https://swagger.fileinnout.com).
+  extra-cors-origins: ${APP_EXTRA_CORS_ORIGINS:https://swagger.fileinnout.com}
 
 spring:
   data:
