@@ -1,3 +1,6 @@
 /gradlew text eol=lf
 *.bat text eol=crlf
 *.jar binary
+
+# nGrinder 부하 테스트 스크립트를 언어 통계에서 제외 (주 언어 Java 복원)
+backend/ngrinder/** linguist-vendored
