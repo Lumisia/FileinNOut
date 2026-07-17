@@ -105,7 +105,7 @@ FileInNOut은 클라우드 파일 저장소, 실시간 문서 협업, 채팅, �
 
 **수료 후 단독 고도화 (2026.06 ~ )** — 아래 항목은 전부 수료 후 혼자 작업한 내용입니다.
 
-- **안정성** — SSE 중복 연결을 단일 연결로 통합 + heartbeat 추가로 재연결 폭주 해결, OAuth 쿠키 도메인 이슈 해결 (서브도메인 콜백 인증 실패, Tomcat RFC6265 거부)
+- **안정성** — 프록시 경유 실운영 HTTPS 환경으로 이전하며 드러난 SSE 연결 끊김·재연결 반복을 단일 연결 통합 + heartbeat로 해결, OAuth 쿠키 도메인 이슈 해결 (서브도메인 콜백 인증 실패, Tomcat RFC6265 거부)
 - **보안·운영** — DB·MinIO 자격증명 ConfigMap→Secret 분리 + 회전 시 재기동 checksum, MinIO presigned URL 외부 HTTPS 서명
 - **인프라** — GitHub Actions 멀티아치(amd64+arm64) buildx 빌드, OCI ARM64 노드 k3s에 Helm 배포
 - **관측** — Prometheus·Grafana·Jaeger·Kiali 구축 후 방문자 읽기 전용 공개 (하단 모니터링 섹션)
