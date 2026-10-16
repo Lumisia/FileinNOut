@@ -15,6 +15,7 @@ backend:
     STORAGE_PROVIDER: "minio"
     MINIO_API: "http://minio:9000"
     MINIO_PUBLIC_API: "https://minio.fileinnout.com"
+    MANAGEMENT_OTLP_TRACING_ENDPOINT: "http://jaeger-collector.observability.svc.cluster.local:4318/v1/traces"
   resources:
     requests:
       cpu: "300m"

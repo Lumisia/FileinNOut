@@ -9,6 +9,25 @@ cr:
       strategy: anonymous
     deployment:
       view_only_mode: true
+      ingress:
+        enabled: true
+        override_yaml:
+          metadata:
+            annotations:
+              nginx.ingress.kubernetes.io/app-root: "/kiali"
+          spec:
+            ingressClassName: nginx
+            rules:
+              - host: kiali.fileinnout.com
+                http:
+                  paths:
+                    - path: /
+                      pathType: Prefix
+                      backend:
+                        service:
+                          name: kiali
+                          port:
+                            number: 20001
       accessible_namespaces:
         - "**"
       resources:
@@ -19,6 +38,10 @@ cr:
           cpu: "300m"
           memory: "512Mi"
     external_services:
+      grafana:
+        enabled: true
+        internal_url: "http://grafana.observability.svc.cluster.local"
+        external_url: "https://grafana.fileinnout.com"
       prometheus:
         url: "http://prometheus-server.observability.svc.cluster.local"
       tracing:
