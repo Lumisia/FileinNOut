@@ -211,9 +211,11 @@ public class PostController {
     @GetMapping("/list")
     @Operation(summary = "List workspaces", description = "Returns the current user's accessible workspace list.")
     public BaseResponse list(
-            @AuthenticationPrincipal AuthUserDetails user) {
+            @AuthenticationPrincipal AuthUserDetails user,
+            @RequestParam(value = "page", defaultValue = "0") Integer page,
+            @RequestParam(value = "size", defaultValue = "50") Integer size) {
 
-        List<PostDto.ResList> result = ps.list(user.getIdx());
+        List<PostDto.ResList> result = ps.list(user.getIdx(), page, size);
         return BaseResponse.success(ResponseEntity.ok(result));
     }
 }

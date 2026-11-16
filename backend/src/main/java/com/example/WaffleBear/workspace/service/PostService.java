@@ -23,6 +23,8 @@ import com.example.WaffleBear.workspace.model.relation.UserPostDto;
 import com.example.WaffleBear.workspace.repository.PostRepository;
 import com.example.WaffleBear.workspace.repository.UserPostRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,6 +42,8 @@ import static com.example.WaffleBear.common.model.BaseResponseStatus.*;
 @Service
 @RequiredArgsConstructor
 public class PostService {
+    public static final int DEFAULT_WORKSPACE_LIST_SIZE = 50;
+    public static final int MAX_WORKSPACE_LIST_SIZE = 100;
 
     private final SseService sseService;
     private final EmailVerifyRepository evr;
@@ -452,8 +456,36 @@ public class PostService {
 
     @Transactional(readOnly = true)
     public List<PostDto.ResList> list(Long userIdx) {
-        List<UserPost> relationList =
-                upr.findAllByUser_IdxOrderByWorkspaceUpdatedAtDesc(userIdx);
-        return relationList.stream().map(PostDto.ResList::from).toList();
+        return list(userIdx, 0, DEFAULT_WORKSPACE_LIST_SIZE);
+    }
+
+    @Transactional(readOnly = true)
+    public List<PostDto.ResList> list(Long userIdx, Integer page, Integer size) {
+        Pageable pageable = PageRequest.of(normalizePage(page), normalizeSize(size));
+        return upr.findWorkspaceListByUserIdx(userIdx, pageable)
+                .stream()
+                .map(row -> new PostDto.ResList(
+                        row.getPostIdx(),
+                        row.getTitle(),
+                        row.getUpdatedAt(),
+                        row.getStatus(),
+                        row.getUuid(),
+                        row.getLevel()
+                ))
+                .toList();
+    }
+
+    private int normalizePage(Integer page) {
+        if (page == null || page < 0) {
+            return 0;
+        }
+        return page;
+    }
+
+    private int normalizeSize(Integer size) {
+        if (size == null || size <= 0) {
+            return DEFAULT_WORKSPACE_LIST_SIZE;
+        }
+        return Math.min(size, MAX_WORKSPACE_LIST_SIZE);
     }
 }
