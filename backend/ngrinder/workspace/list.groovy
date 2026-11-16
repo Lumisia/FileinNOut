@@ -9,12 +9,13 @@ import net.grinder.scriptengine.groovy.junit.annotation.BeforeThread
 
 @RunWith(GrinderRunner)
 class TestRunner {
-    protected static String baseUrl = System.getProperty('baseUrl', 'http://192.100.220.17:8080/workspace')
-    protected static String loginEmail = System.getProperty('loginEmail', 'administrator@administrator.adm')
-    protected static String loginPassword = System.getProperty('loginPassword', 'fweiuhfge2232n12@#xSD23@')
+    protected static String baseUrl = System.getProperty('baseUrl', 'http://backend-app:8080/api')
+    protected static String loginEmail = System.getProperty('loginEmail', '')
+    protected static String loginPassword = System.getProperty('loginPassword', '')
 
     protected static net.grinder.script.GTest test
     protected static org.ngrinder.http.HTTPRequest request
+    protected static org.ngrinder.http.HTTPRequest loginRequest
 
     protected String accessToken
     protected String refreshToken
@@ -22,13 +23,22 @@ class TestRunner {
     static void initProcess(String testName) {
         test = new net.grinder.script.GTest(1, testName)
         request = new org.ngrinder.http.HTTPRequest()
+        loginRequest = new org.ngrinder.http.HTTPRequest()
+        test.record(request)
     }
 
     protected void login() {
-        org.ngrinder.http.HTTPResponse response = request.POST(fullUrl('/login').toString(), [
-                email   : loginEmail,
-                password: loginPassword
-        ])
+        assert loginEmail : 'Set the loginEmail nGrinder runtime property.'
+        assert loginPassword : 'Set the loginPassword nGrinder runtime property.'
+
+        org.ngrinder.http.HTTPResponse response = loginRequest.POST(
+                fullUrl('/login').toString(),
+                jsonBytes([
+                        email   : loginEmail,
+                        password: loginPassword
+                ]),
+                headers(['Content-Type': 'application/json; charset=UTF-8'])
+        )
 
         assertStatus(response, [200])
 
@@ -48,22 +58,9 @@ class TestRunner {
             return path
         }
 
-        java.net.URI baseUri = java.net.URI.create(baseUrl)
-        String origin = "${baseUri.scheme}://${baseUri.authority}"
-        String basePath = baseUri.path ?: ''
         String normalizedPath = path.startsWith('/') ? path : "/${path}"
-
-        if (normalizedPath == '/login'
-                || normalizedPath.startsWith('/oauth2')
-                || normalizedPath.startsWith('/login/oauth2')) {
-            return "${origin}${normalizedPath}".toString()
-        }
-
-        if (basePath == null || basePath.isBlank() || normalizedPath.startsWith(basePath)) {
-            return "${origin}${normalizedPath}".toString()
-        }
-
-        return "${baseUrl}${normalizedPath}".toString()
+        String normalizedBaseUrl = baseUrl.replaceAll('/+$', '')
+        return "${normalizedBaseUrl}${normalizedPath}".toString()
     }
 
     protected Map<String, String> headers(Map<String, String> base = [:], Map<String, String> extra = [:]) {
@@ -259,7 +256,10 @@ class TestRunner {
 
     @Test
     void test() {
-        def response = get('/workspace/list')
+        def response = get('/workspace/list', [
+                page: propInt('listPage', 0),
+                size: propInt('listSize', 50)
+        ])
         assertStatus(response)
     }
 }
