@@ -33,6 +33,11 @@ mariadb:
   storageClassName: local-path
   storage:
     size: 8Gi
+  extraArgs:                              # MariaDB 시작 명령 뒤에 붙일 추가 옵션 목록
+  - --server-id=1                         # 해당 DB의 고유 번호 설정.
+  - --log-bin=mysql-bin                   # 변경 기록(바이너리 로그) 켜서 기록 저장하기.
+  - --binlog-format=ROW                   # SQL 문장이 아니라 ROWS 기록해야 새 DB에 똑같이 반영
+  - --binlog-expire-logs-seconds=604800   # 기록을 7일만 보관 후 삭제
   resources:
     requests:
       cpu: "250m"

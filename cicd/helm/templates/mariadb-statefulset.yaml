@@ -41,6 +41,9 @@ spec:
           args:
             - --character-set-server=utf8mb4
             - --collation-server=utf8mb4_unicode_ci
+            {{- range .Values.mariadb.extraArgs }}
+            - {{ . | quote }}
+            {{- end }}
           ports:
             - containerPort: 3306
               name: mariadb
