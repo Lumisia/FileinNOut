@@ -14,7 +14,7 @@
 <table border="0" width="80%">
 <tr>
 <td align="center" colspan="4">
-<b>TEAM MEMBER</b>
+<b>MAINTAINER</b>
 </td>
 </tr>
 <tr>
@@ -27,16 +27,25 @@
 </td>
 </tr>
 </table>
+
+<p>
+🏁 <b>한화시스템 BEYOND SW 캠프 24기 4인 팀 프로젝트</b>(2026.01 ~ 2026.04)로 시작한 서비스를<br/>
+수료 후 개인 리포지토리로 이어받아 <b>단독으로 운영·고도화</b>하고 있습니다. (2026.06 ~ )<br/>
+<a href="https://github.com/beyond-sw-camp/be24-3rd-ShakeShackFile-In-N-Out-File" target="_blank" rel="noopener noreferrer">원본 팀 리포지토리 ↗</a>
+</p>
 </div>
 
 <div align="center">
 <a href="#프로젝트-소개">소개</a> &nbsp;|&nbsp;
+<a href="#서비스-도메인">라이브 데모</a> &nbsp;|&nbsp;
+<a href="#담당--고도화">담당 & 고도화</a> &nbsp;|&nbsp;
+<a href="#트러블슈팅">트러블슈팅</a> &nbsp;|&nbsp;
 <a href="#기술-스택">기술 스택</a> &nbsp;|&nbsp;
-<a href="#.env-파일-설정"> .env 파일 설정 </a> &nbsp;|&nbsp;
-<a href="#swagger-api-문서">Swagger</a> &nbsp;|&nbsp;
+<a href="#로컬-실행">로컬 실행</a> &nbsp;|&nbsp;
+<a href="#모니터링--운영-대시보드">모니터링</a> &nbsp;|&nbsp;
 <a href="#시스템-아키텍처">아키텍처</a> &nbsp;|&nbsp;
 <a href="#데이터베이스-설계">ERD</a> &nbsp;|&nbsp;
-<a href="#서비스-도메인">도메인</a>
+<a href="#배포-서버">배포 서버</a>
 </div>
 
 <hr/>
@@ -75,6 +84,46 @@ FileInNOut은 클라우드 파일 저장소, 실시간 문서 협업, 채팅, �
 </table>
 
 <hr/>
+
+<h2 id="서비스-도메인">라이브 데모</h2>
+<div align="center">
+<a href="https://lumisia.fileinnout.com/" target="_blank" rel="noopener noreferrer">
+<p>lumisia.fileinnout.com</p>
+</a>
+</div>
+
+<hr/>
+
+<h2 id="담당--고도화">담당 & 수료 후 고도화</h2>
+
+**팀 프로젝트 시절 담당 (2026.01 ~ 2026.04) — 워크스페이스 도메인 · WebSocket 백엔드**
+
+- 워크스페이스 CRUD·권한 검증 API 설계, 내부 에셋 저장 구조 설계
+- 실시간 협업 문서 구현 — Yjs WebSocket + Editor.js, 블록 단위 CRDT 병합
+- 초대·반려·알림 (SSE, STOMP WebSocket), Redis Pub/Sub 기반 다중 인스턴스 이벤트 전파
+- Argo Rollouts 블루/그린 배포
+
+**수료 후 단독 고도화 (2026.06 ~ )** — 아래 항목은 전부 수료 후 혼자 작업한 내용입니다.
+
+- **안정성** — 프록시 경유 실운영 HTTPS 환경으로 이전하며 드러난 SSE 연결 끊김·재연결 반복을 단일 연결 통합 + heartbeat로 해결, OAuth 쿠키 도메인 이슈 해결 (서브도메인 콜백 인증 실패, Tomcat RFC6265 거부)
+- **보안·운영** — DB·MinIO 자격증명 ConfigMap→Secret 분리 + 회전 시 재기동 checksum, MinIO presigned URL 외부 HTTPS 서명
+- **인프라** — GitHub Actions 멀티아치(amd64+arm64) buildx 빌드, OCI ARM64 노드 k3s에 Helm 배포
+- **관측** — Prometheus·Grafana·Jaeger·Kiali 구축 후 방문자 읽기 전용 공개 (하단 모니터링 섹션)
+- **기능** — 워크스페이스 버전 비교·복구, 파일 스트리밍 다운로드, 공개 데모 계정 + 저장 쿼터
+- **품질** — SSE heartbeat·OAuth 쿠키·스토리지 정책 회귀 테스트 작성 (`backend/src/test`)
+
+<hr/>
+
+<h2 id="트러블슈팅">기술적 의사결정 & 트러블슈팅</h2>
+
+| 문제 | 접근 | 결과 |
+|---|---|---|
+| 동시 편집 시 마지막 저장자가 다른 사용자의 편집을 덮어씀 | 편집 잠금 / LWW / OT / CRDT 비교 후 **CRDT(Yjs)** 채택, 병합 단위를 문서 전체에서 **블록 단위 Y.Map**으로 재설계 | 동시 편집 유실 0, 변경 블록만 렌더링 |
+| 워크스페이스 목록 30초 폴링 + 전체 엔티티 조회 | **SSE 푸시** 전환 + **Projection·페이지네이션** 조회 | TPS 32.7 → 192.4 (5.9배), 평균 응답 89% 감소 — nGrinder 100 VU |
+| 다중 인스턴스 환경에서 SSE 알림 누락 | **Redis Pub/Sub** 이벤트 버스로 인스턴스 간 중계 | 어느 인스턴스에 연결돼도 동일 알림 수신 |
+
+→ 상세 분석 · 전후 코드 · nGrinder 리포트: <a href="https://lumisia.github.io/projects/fileinnout/" target="_blank" rel="noopener noreferrer"><b>포트폴리오 트러블슈팅 전문</b></a>
+
 
 <h2 id="기술-스택">기술 스택</h2>
 
@@ -188,12 +237,27 @@ PORTONE_SECRET=your_portone_api_secret
 
 <hr/>
 
+<h2 id="로컬-실행">로컬 실행</h2>
+
+전체 스택(프론트 + 백엔드 + WebSocket 서버 + MariaDB + Redis + MinIO)을 Docker Compose로 한 번에 기동합니다.
+
+```bash
+cp .env.example .env    # placeholder 값 채우기 (위 .env 섹션 참고)
+./docker-up.sh          # Windows: ./docker-up.ps1
+```
+
+- 프론트: http://localhost · Swagger: http://localhost:8080/swagger-ui.html
+- 구성 서비스·운영 명령 상세: <a href="./DOCKER.md">DOCKER.md</a>
+- 백엔드 테스트 실행: `cd backend && ./gradlew test`
+
+<hr/>
+
 
 <h2 id="swagger-api-문서">Swagger API 문서</h2>
 <details>
 <summary>Swagger API 문서 상세 보기</summary>
 
-<a href="https://api.fileinnout.kro.kr/swagger-ui/index.html" target="_blank"> 🚀 Swagger API 명세서 (Live)</a>
+<a href="https://swagger.fileinnout.com/api/swagger-ui/index.html" target="_blank"> 🚀 Swagger API 명세서 (Live)</a>
 <p>백엔드 API 명세와 테스트는 Swagger UI에서 확인할 수 있습니다.</p>
 </details>
 
@@ -217,12 +281,66 @@ PORTONE_SECRET=your_portone_api_secret
 
 <hr/>
 
-<h2 id="서비스-도메인">서비스 도메인</h2>
-<div align="left">
-<a href="https://www.fileinnout.kro.kr" target="_blank" rel="noopener noreferrer">
-<p>www.fileinnout.kro.kr</p>
-</a>
+<h2 id="모니터링--운영-대시보드">모니터링 & 운영 대시보드</h2>
+
+<p>k3s 클러스터 위에서 운영 중인 옵저버빌리티 / 운영 도구 대시보드입니다. 관측 UI는 익명 read-only로 공개되어 있습니다.</p>
+
+<div align="center">
+<a href="https://grafana.fileinnout.com/d/rYdddlPWk/node-exporter-full?orgId=1&from=now-5m&to=now&timezone=browser&var-ds_prometheus=PBFA97CFB590B2093&var-job=kubernetes-service-endpoints&var-nodename=instance20260526051902&var-node=10.0.0.164:9100&refresh=1m" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/Grafana-F46800?style=for-the-badge&logo=grafana&logoColor=white" alt="Grafana"/></a>
+<a href="https://prometheus.fileinnout.com/targets" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/Prometheus-E6522C?style=for-the-badge&logo=prometheus&logoColor=white" alt="Prometheus"/></a>
+<a href="https://jaeger.fileinnout.com/search?end=1781757710987000&limit=20&lookback=1h&maxDuration&minDuration&service=jaeger-all-in-one&start=1781754110987000" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/Jaeger-66CFE3?style=for-the-badge&logo=jaeger&logoColor=black" alt="Jaeger"/></a>
+<a href="https://kiali.fileinnout.com/kiali/console/mesh?duration=300&refresh=60000&meshLayout=dagre" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/Kiali-466BB0?style=for-the-badge&logo=istio&logoColor=white" alt="Kiali"/></a>
+<a href="https://dashboard.fileinnout.com" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/Kubernetes_Dashboard-326CE5?style=for-the-badge&logo=kubernetes&logoColor=white" alt="Kubernetes Dashboard"/></a>
+<a href="https://swagger.fileinnout.com/" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/Swagger-85EA2D?style=for-the-badge&logo=swagger&logoColor=black" alt="Swagger"/></a>
 </div>
+
+<hr/>
+
+<h2 id="배포-서버">서비스 도메인 / 배포 서버</h2>
+
+<p>OCI 단일 노드(k3s) 위에서 ingress-nginx로 라우팅되는 배포 서버 목록입니다. (TLS 인증서: <code>*.fileinnout.com</code>)</p>
+
+<table>
+<thead>
+<tr>
+<th>DNS</th>
+<th>역할</th>
+<th>스택 / 비고</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="https://grafana.fileinnout.com" target="_blank" rel="noopener noreferrer">grafana.fileinnout.com</a></td>
+<td>메트릭 시각화 대시보드</td>
+<td>Grafana · Node Exporter Full 등 · 익명 Viewer 공개</td>
+</tr>
+<tr>
+<td><a href="https://prometheus.fileinnout.com" target="_blank" rel="noopener noreferrer">prometheus.fileinnout.com</a></td>
+<td>메트릭 수집 / 쿼리</td>
+<td>Prometheus · PromQL · <code>/targets</code> 스크랩 상태</td>
+</tr>
+<tr>
+<td><a href="https://jaeger.fileinnout.com" target="_blank" rel="noopener noreferrer">jaeger.fileinnout.com</a></td>
+<td>분산 트레이싱</td>
+<td>Jaeger all-in-one · Istio 텔레메트리 추적</td>
+</tr>
+<tr>
+<td><a href="https://kiali.fileinnout.com/kiali" target="_blank" rel="noopener noreferrer">kiali.fileinnout.com</a></td>
+<td>서비스 메시 관측</td>
+<td>Kiali · Istio mesh 토폴로지 · anonymous view-only</td>
+</tr>
+<tr>
+<td><a href="https://dashboard.fileinnout.com" target="_blank" rel="noopener noreferrer">dashboard.fileinnout.com</a></td>
+<td>쿠버네티스 클러스터 관리 UI</td>
+<td>Kubernetes Dashboard · k3s 워크로드/리소스 조회</td>
+</tr>
+<tr>
+<td><a href="https://swagger.fileinnout.com/" target="_blank" rel="noopener noreferrer">swagger.fileinnout.com</a></td>
+<td>API 명세 / 테스트</td>
+<td>springdoc Swagger UI · 백엔드 OpenAPI 문서</td>
+</tr>
+</tbody>
+</table>
 
 <hr/>
 
@@ -233,7 +351,7 @@ PORTONE_SECRET=your_portone_api_secret
 <details>
 <summary>1. 사용자 인증 (회원가입 및 로그인)</summary>
 <div align="center">
-<img src="./Image/user_auth.gif" width="850" alt="user auth demo" />
+<img src="./images/user_auth.gif" width="850" alt="user auth demo" />
 <p>회원가입, 로그인, OAuth 기반 인증과 토큰 기반 세션 흐름을 지원합니다.</p>
 </div>
 </details>
@@ -241,7 +359,7 @@ PORTONE_SECRET=your_portone_api_secret
 <details>
 <summary>2. 파일 및 문서 관리</summary>
 <div align="center">
-<img src="./Image/file_docs.gif" width="850" alt="file docs demo" />
+<img src="./images/file.gif" width="850" alt="file docs demo" />
 <p>파일 트리 구조 안에서 폴더/파일을 관리하고, 문서(Page)를 생성해 연결된 작업 흐름을 제공합니다.</p>
 </div>
 </details>
@@ -249,7 +367,7 @@ PORTONE_SECRET=your_portone_api_secret
 <details>
 <summary>3. 실시간 채팅</summary>
 <div align="center">
-<img src="./Image/chat.gif" width="850" alt="chat demo" />
+<img src="./images/chat.gif" width="850" alt="chat demo" />
 <p>텍스트, 이미지, 파일 메시지를 기반으로 팀원과 실시간 소통할 수 있으며, 읽음 상태와 알림 흐름을 함께 제공합니다.</p>
 </div>
 </details>
@@ -257,7 +375,7 @@ PORTONE_SECRET=your_portone_api_secret
 <details>
 <summary>4. 실시간 문서 편집기</summary>
 <div align="center">
-<img src="./Image/editor.gif" width="850" alt="editor demo" />
+<img src="./images/editor.gif" width="850" alt="editor demo" />
 <p>블록 기반 에디터와 실시간 동시 편집 기능을 통해 협업 문서 작업을 지원합니다.</p>
 </div>
 </details>
@@ -265,13 +383,15 @@ PORTONE_SECRET=your_portone_api_secret
 <details>
 <summary>5. 그룹, 초대, 공유</summary>
 <div align="center">
+<img src="./images/group.gif" width="850" alt="editor demo" />
 <p>사용자 간 연결 요청, 그룹 생성, 그룹 초대, 파일/채팅/워크스페이스 공유 기능을 통해 협업 대상을 유연하게 구성할 수 있습니다.</p>
 </div>
 </details>
 
 <details>
-<summary>6. 알림 및 결제</summary>
+<summary>6. 알림 서비스</summary>
 <div align="center">
+<img src="./images/notification.gif" width="850" alt="editor demo" />
 <p>실시간 알림으로 초대, 채팅, 요청 상태를 빠르게 확인할 수 있으며, PortOne 기반 결제를 통해 스토리지 확장 흐름을 제공합니다.</p>
 </div>
 </details>

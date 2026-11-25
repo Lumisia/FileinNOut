@@ -1,11 +1,15 @@
 package com.example.WaffleBear.workspace.repository;
 
 import com.example.WaffleBear.user.model.User;
+import com.example.WaffleBear.workspace.model.post.isShare;
+import com.example.WaffleBear.workspace.model.relation.AccessRole;
 import com.example.WaffleBear.workspace.model.relation.UserPost;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -20,6 +24,21 @@ public interface UserPostRepository extends JpaRepository<UserPost, Long> {
 
     @Query("SELECT up FROM UserPost up JOIN FETCH up.workspace w WHERE up.user.idx = :userIdx ORDER BY w.updatedAt DESC, w.createdAt DESC")
     List<UserPost> findAllByUser_IdxOrderByWorkspaceUpdatedAtDesc(@Param("userIdx") Long userIdx);
+
+    @Query("""
+            SELECT
+                w.idx as postIdx,
+                w.title as title,
+                w.updatedAt as updatedAt,
+                w.status as status,
+                w.UUID as uuid,
+                up.Level as level
+            FROM UserPost up
+            JOIN up.workspace w
+            WHERE up.user.idx = :userIdx
+            ORDER BY w.updatedAt DESC, w.createdAt DESC
+            """)
+    List<WorkspaceListProjection> findWorkspaceListByUserIdx(@Param("userIdx") Long userIdx, Pageable pageable);
 
     Optional<UserPost> deleteByUser_IdxAndWorkspace_Idx(Long userId, Long workspaceId);
 
@@ -44,4 +63,18 @@ public interface UserPostRepository extends JpaRepository<UserPost, Long> {
     // 필요한 User ID만 Long 타입으로 바로 뽑아옵니다.
     @Query("SELECT up.user.idx FROM UserPost up WHERE up.workspace.idx = :postIdx")
     List<Long> findUserIdsByPostIdx(@Param("postIdx") Long postIdx);
+
+    interface WorkspaceListProjection {
+        Long getPostIdx();
+
+        String getTitle();
+
+        LocalDateTime getUpdatedAt();
+
+        isShare getStatus();
+
+        String getUuid();
+
+        AccessRole getLevel();
+    }
 }

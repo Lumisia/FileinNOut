@@ -1,0 +1,55 @@
+services:
+  backend-app:
+    cpus: 2.0
+    mem_limit: 2g
+    environment:
+      MINIO_CLOUD_BUCKET: ""
+      MINIO_WORKSPACE_BUCKET: ""
+    depends_on: !override
+      redis:
+        condition: service_started
+      db:
+        condition: service_healthy
+
+  ngrinder-controller:
+    image: ngrinder/controller:3.5.9-p1
+    container_name: waffle-ngrinder-controller
+    ports:
+      - "8300:80"
+    volumes:
+      - ngrinder_controller_data:/opt/ngrinder-controller
+    networks:
+      - waffle-net
+    restart: unless-stopped
+
+  ngrinder-agent:
+    image: ngrinder/agent:3.5.9-p1
+    container_name: waffle-ngrinder-agent
+    command: ["ngrinder-controller:80"]
+    depends_on:
+      ngrinder-controller:
+        condition: service_started
+    volumes:
+      - ngrinder_agent_data:/opt/ngrinder-agent
+      - ./cicd/ngrinder-agent.conf:/opt/ngrinder-agent/.ngrinder-agent/agent.conf:ro
+    networks:
+      - waffle-net
+    restart: unless-stopped
+
+  ngrinder-agent-2:
+    image: ngrinder/agent:3.5.9-p1
+    container_name: waffle-ngrinder-agent-2
+    command: ["ngrinder-controller:80"]
+    depends_on:
+      ngrinder-controller:
+        condition: service_started
+    volumes:
+      - ngrinder_agent_2_data:/opt/ngrinder-agent
+    networks:
+      - waffle-net
+    restart: unless-stopped
+
+volumes:
+  ngrinder_controller_data:
+  ngrinder_agent_data:
+  ngrinder_agent_2_data:
